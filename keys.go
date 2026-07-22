@@ -7,17 +7,23 @@ import (
 	"strings"
 )
 
-// KekFor: KEK (32 bytes) de un tenant desde env CLP_KEK_<TENANT> (base64), con el nombre en
-// mayúsculas y '-' -> '_'. Paridad con el EnvKeyProvider del appender. En F2 esto
-// se sustituye por Vault Transit (la KEK nunca sale de Vault) detrás de la misma firma KekFn.
+// KekFor: KEK (32 bytes) de un tenant desde env SCG_KEK_<TENANT> (base64), con el nombre en
+// mayúsculas y '-' -> '_'. Se acepta CLP_KEK_<TENANT> como alias de compatibilidad (paridad
+// con el EnvKeyProvider del appender Java de clp-log-tier). En una fase futura esto se
+// sustituye por Vault Transit (la KEK nunca sale de Vault) detrás de la misma firma KekFn.
 func KekFor(tenant string) ([]byte, error) {
 	if tenant == "" {
 		return nil, fmt.Errorf("tenant vacío")
 	}
-	name := "CLP_KEK_" + strings.ToUpper(strings.ReplaceAll(tenant, "-", "_"))
+	suffix := strings.ToUpper(strings.ReplaceAll(tenant, "-", "_"))
+	name := "SCG_KEK_" + suffix
 	b64 := os.Getenv(name)
+	if b64 == "" { // alias de compatibilidad
+		name = "CLP_KEK_" + suffix
+		b64 = os.Getenv(name)
+	}
 	if b64 == "" {
-		return nil, fmt.Errorf("falta la KEK del tenant %q (env %s)", tenant, name)
+		return nil, fmt.Errorf("falta la KEK del tenant %q (env SCG_KEK_%s o CLP_KEK_%s)", tenant, suffix, suffix)
 	}
 	kek, err := base64.StdEncoding.DecodeString(strings.TrimSpace(b64))
 	if err != nil {

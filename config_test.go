@@ -9,7 +9,7 @@ import (
 
 func TestTenantOf(t *testing.T) {
 	cases := map[string]string{
-		"ir-go/acmecorp/prod/k8s/ns/svc/pod/c/2026/06/17/x.jsonl.zst": "acmecorp",
+		"ir-go/tenant-a/prod/k8s/ns/svc/pod/c/2026/06/17/x.jsonl.zst": "tenant-a",
 		"archives/maple/prod/2026/06/17/a":                            "maple",
 		"ir-go":                                                       "",
 		"":                                                            "",
@@ -22,7 +22,7 @@ func TestTenantOf(t *testing.T) {
 }
 
 func TestEncEnabled(t *testing.T) {
-	key := "ir-go/acmecorp/prod/k8s/ns/svc/pod/c/x"
+	key := "ir-go/tenant-a/prod/k8s/ns/svc/pod/c/x"
 	// global off
 	if (Config{EncEnabled: false}).encEnabled(key) {
 		t.Error("off global debería no cifrar")
@@ -32,7 +32,7 @@ func TestEncEnabled(t *testing.T) {
 		t.Error("on global debería cifrar")
 	}
 	// filtro por tenant
-	if !(Config{EncEnabled: true, EncTenants: []string{"acmecorp"}}).encEnabled(key) {
+	if !(Config{EncEnabled: true, EncTenants: []string{"tenant-a"}}).encEnabled(key) {
 		t.Error("tenant permitido")
 	}
 	if (Config{EncEnabled: true, EncTenants: []string{"maple"}}).encEnabled(key) {

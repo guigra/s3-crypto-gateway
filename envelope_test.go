@@ -9,7 +9,7 @@ func fixedKek(string) ([]byte, error) { return bytes.Repeat([]byte{7}, 32), nil 
 
 func TestEnvelopeRoundTrip(t *testing.T) {
 	pt := []byte("Año señor € — log de prueba con UTF-8")
-	ct, err := Encrypt(pt, "acmecorp", fixedKek)
+	ct, err := Encrypt(pt, "tenant-a", fixedKek)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +27,7 @@ func TestEnvelopeRoundTrip(t *testing.T) {
 
 // Verifica el layout byte-a-byte (= formato del Encryptor Java -> interoperable).
 func TestEnvelopeLayout(t *testing.T) {
-	ct, err := Encrypt([]byte("x"), "acmecorp", fixedKek)
+	ct, err := Encrypt([]byte("x"), "tenant-a", fixedKek)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,16 +37,17 @@ func TestEnvelopeLayout(t *testing.T) {
 	if ct[4] != 1 {
 		t.Fatalf("version: %d", ct[4])
 	}
-	if int(ct[5]) != len("acmecorp") {
+	tenant := "tenant-a"
+	if int(ct[5]) != len(tenant) {
 		t.Fatalf("tenantLen: %d", ct[5])
 	}
-	if string(ct[6:6+8]) != "acmecorp" {
-		t.Fatalf("tenant: %q", ct[6:6+8])
+	if string(ct[6:6+len(tenant)]) != tenant {
+		t.Fatalf("tenant: %q", ct[6:6+len(tenant)])
 	}
 }
 
 func TestTamperFails(t *testing.T) {
-	ct, _ := Encrypt([]byte("secreto"), "acmecorp", fixedKek)
+	ct, _ := Encrypt([]byte("secreto"), "tenant-a", fixedKek)
 	ct[len(ct)-1] ^= 0xFF // manipula el ciphertext
 	if _, err := Decrypt(ct, fixedKek); err == nil {
 		t.Fatal("GCM debería detectar la manipulación")
@@ -54,7 +55,7 @@ func TestTamperFails(t *testing.T) {
 }
 
 func TestWrongKekFails(t *testing.T) {
-	ct, _ := Encrypt([]byte("secreto"), "acmecorp", fixedKek)
+	ct, _ := Encrypt([]byte("secreto"), "tenant-a", fixedKek)
 	other := func(string) ([]byte, error) { return bytes.Repeat([]byte{9}, 32), nil }
 	if _, err := Decrypt(ct, other); err == nil {
 		t.Fatal("una KEK errónea debería fallar al descifrar")

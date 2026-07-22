@@ -44,11 +44,11 @@ podman run -p 9000:9000 \
   -e AWS_REGION=eu-central-1 \
   -e AWS_ACCESS_KEY_ID=... -e AWS_SECRET_ACCESS_KEY=... \
   -e ENC_ENABLED=true \
-  -e CLP_KEK_ACMECORP=$(openssl rand -base64 32) \
+  -e SCG_KEK_TENANT_A=$(openssl rand -base64 32) \
   s3-crypto-gateway
 
 # then point any S3 client at it (path-style):
-aws s3 cp file.txt s3://my-bucket/ir/acmecorp/file.txt \
+aws s3 cp file.txt s3://my-bucket/ir/tenant-a/file.txt \
   --endpoint-url http://localhost:9000
 ```
 
@@ -61,7 +61,7 @@ aws s3 cp file.txt s3://my-bucket/ir/acmecorp/file.txt \
 | `ENC_ENABLED` | `true`/`false` — envelope encryption on/off (off = transparent proxy) |
 | `ENC_TENANTS` | CSV of tenants to encrypt; empty = all |
 | `ENC_PREFIXES` | CSV of key prefixes to encrypt (e.g. `ir/,archives/`); empty = all |
-| `CLP_KEK_<TENANT>` | base64 32-byte KEK per tenant |
+| `SCG_KEK_<TENANT>` | base64 32-byte KEK per tenant (uppercased, `-`→`_`; `CLP_KEK_<TENANT>` accepted as a compatibility alias) |
 | `SSEC_ENABLED` / `SSEC_KEY` | optional **SSE-C** layer (headers to the backend; stacks with the envelope) |
 
 ## Design notes
