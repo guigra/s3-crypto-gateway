@@ -64,6 +64,24 @@ aws s3 cp file.txt s3://my-bucket/ir/tenant-a/file.txt \
 | `SCG_KEK_<TENANT>` | base64 32-byte KEK per tenant (uppercased, `-`→`_`; `CLP_KEK_<TENANT>` accepted as a compatibility alias) |
 | `SSEC_ENABLED` / `SSEC_KEY` | optional **SSE-C** layer (headers to the backend; stacks with the envelope) |
 
+## Use as a Go library
+
+The CLPE envelope is also importable — no proxy needed — from
+`github.com/guigra/s3-crypto-gateway/pkg/clpe`:
+
+```go
+import "github.com/guigra/s3-crypto-gateway/pkg/clpe"
+
+kek := func(tenant string) ([]byte, error) { return myKeyStore.Get(tenant) }
+
+env, err := clpe.Encrypt(plaintext, "tenant-a", kek) // seal
+pt, err  := clpe.Decrypt(env, kek)                   // open (fails on tampering / wrong KEK)
+ok       := clpe.IsEnvelope(data)                    // detect
+```
+
+The library never reads the environment: you supply keys via a `KekFn`
+(env vars, Vault, KMS…). Docs: `pkg.go.dev/github.com/guigra/s3-crypto-gateway/pkg/clpe`.
+
 ## Design notes
 
 - **Stateless synchronous transform** — no ring buffer: backpressure belongs

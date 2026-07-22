@@ -1,4 +1,17 @@
-package main
+// Package clpe implements the CLPE envelope: authenticated per-object envelope
+// encryption (AES-256-GCM) with multi-tenant key wrapping.
+//
+// Each payload is encrypted with a random 256-bit DEK; the DEK is wrapped with
+// the tenant's KEK. GCM authenticates everything, so any tampering fails on
+// decrypt. The wire format is byte-compatible with the Java Encryptor used in
+// clp-log-tier, so both implementations interoperate:
+//
+//	magic(4)="CLPE" | ver(1)=1 | tenantLen(1)|tenant | ivDek(12) | dekCtLen(2 BE)|dekCt
+//	| ivData(12) | dataCt(rest)
+//
+// Callers provide key material via a KekFn (env vars, Vault, KMS, …); the
+// library never reads the environment itself.
+package clpe
 
 import (
 	"crypto/aes"
@@ -9,14 +22,6 @@ import (
 	"io"
 )
 
-// Sobre CLPE — MISMO formato byte-a-byte que el Encryptor Java del appender, para
-// que ambas implementaciones sean interoperables:
-//
-//	magic(4)="CLPE" | ver(1)=1 | tenantLen(1)|tenant | ivDek(12) | dekCtLen(2 BE)|dekCt
-//	| ivData(12) | dataCt(resto)
-//
-// Cifrado de SOBRE AES-256-GCM: DEK aleatoria por objeto (32B) cifra el dato; la DEK se envuelve
-// con la KEK del tenant. GCM autentica -> cualquier manipulación falla al descifrar.
 var clpeMagic = []byte("CLPE")
 
 const (
@@ -25,13 +30,14 @@ const (
 	dekLen      = 32 // AES-256
 )
 
-// KekFn devuelve la KEK (32 bytes) de un tenant.
+// KekFn returns the 32-byte KEK for a tenant.
 type KekFn func(tenant string) ([]byte, error)
 
-// IsEnvelope: true si b empieza por el magic CLPE (para decidir descifrar en GET).
+// IsEnvelope reports whether b starts with the CLPE magic (e.g. to decide
+// whether a fetched object needs decryption).
 func IsEnvelope(b []byte) bool { return len(b) >= 4 && string(b[:4]) == "CLPE" }
 
-// Encrypt produce el sobre CLPE de pt bajo la KEK del tenant.
+// Encrypt seals pt into a CLPE envelope under the tenant's KEK.
 func Encrypt(pt []byte, tenant string, kekFor KekFn) ([]byte, error) {
 	if len(tenant) > 255 {
 		return nil, errors.New("tenant demasiado largo (>255)")
@@ -77,7 +83,8 @@ func Encrypt(pt []byte, tenant string, kekFor KekFn) ([]byte, error) {
 	return out, nil
 }
 
-// Decrypt descifra un sobre CLPE. Falla si está manipulado o la KEK es errónea.
+// Decrypt opens a CLPE envelope. It fails if the envelope was tampered with
+// or the KEK is wrong.
 func Decrypt(env []byte, kekFor KekFn) ([]byte, error) {
 	if !IsEnvelope(env) {
 		return nil, errors.New("magic CLPE inválido")

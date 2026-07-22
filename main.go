@@ -13,6 +13,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+
+	"github.com/guigra/s3-crypto-gateway/pkg/clpe"
 	"os"
 	"strconv"
 	"strings"
@@ -89,7 +91,7 @@ func (gw *Gateway) put(ctx context.Context, w http.ResponseWriter, r *http.Reque
 	meta := userMeta(r.Header)
 	ct := r.Header.Get("Content-Type")
 	if gw.cfg.encEnabled(key) {
-		enc, err := Encrypt(body, tenantOf(key), KekFor)
+		enc, err := clpe.Encrypt(body, tenantOf(key), KekFor)
 		if err != nil {
 			s3err(w, 500, "EncryptError", err.Error())
 			return
@@ -111,8 +113,8 @@ func (gw *Gateway) get(ctx context.Context, w http.ResponseWriter, bucket, key s
 		gw.upstreamErr(w, err)
 		return
 	}
-	if IsEnvelope(body) {
-		pt, derr := Decrypt(body, KekFor)
+	if clpe.IsEnvelope(body) {
+		pt, derr := clpe.Decrypt(body, KekFor)
 		if derr != nil {
 			s3err(w, 500, "DecryptError", derr.Error())
 			return
@@ -178,7 +180,7 @@ func (gw *Gateway) list(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	for _, o := range out.Contents {
 		res.Contents = append(res.Contents, listObj{Key: aws.ToString(o.Key),
 			LastModified: o.LastModified.UTC().Format("2006-01-02T15:04:05.000Z"),
-			ETag: aws.ToString(o.ETag), Size: derefI64(o.Size), StorageClass: string(o.StorageClass)})
+			ETag:         aws.ToString(o.ETag), Size: derefI64(o.Size), StorageClass: string(o.StorageClass)})
 	}
 	for _, cp := range out.CommonPrefixes {
 		res.CommonPrefixes = append(res.CommonPrefixes, commonPrefix{Prefix: aws.ToString(cp.Prefix)})
