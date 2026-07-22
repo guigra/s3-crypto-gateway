@@ -1,0 +1,82 @@
+name: release
+# Tag v* → build → ghcr.io → cosign keyless → SBOM CycloneDX attestado →
+# provenance SLSA L3 → verificación independiente.
+on:
+  push:
+    tags: ['v*']
+
+permissions: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        id: push
+        with:
+          context: .
+          file: Containerfile
+          push: true
+          tags: ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+      - uses: sigstore/cosign-installer@v3
+      - name: firma keyless + SBOM attestado
+        env:
+          IMG: ghcr.io/${{ github.repository }}@${{ steps.push.outputs.digest }}
+        run: |
+          cosign sign --yes "$IMG"
+          curl -sL https://github.com/aquasecurity/trivy/releases/latest/download/trivy_Linux-64bit.tar.gz | tar xz trivy
+          ./trivy image --format cyclonedx --output sbom.cdx.json "$IMG" --quiet
+          cosign attest --yes --type cyclonedx --predicate sbom.cdx.json "$IMG"
+
+  provenance:
+    needs: build
+    permissions:
+      actions: read
+      id-token: write
+      packages: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
+    with:
+      image: ghcr.io/${{ github.repository }}
+      digest: ${{ needs.build.outputs.digest }}
+      registry-username: ${{ github.actor }}
+    secrets:
+      registry-password: ${{ secrets.GITHUB_TOKEN }}
+
+  verify:
+    needs: [build, provenance]
+    runs-on: ubuntu-latest
+    permissions:
+      packages: read
+    steps:
+      - uses: sigstore/cosign-installer@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: verificar firma, SBOM y provenance
+        env:
+          IMG: ghcr.io/${{ github.repository }}@${{ needs.build.outputs.digest }}
+        run: |
+          cosign verify "$IMG" \
+            --certificate-identity-regexp "^https://github.com/${{ github.repository }}/" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com
+          cosign verify-attestation --type cyclonedx "$IMG" \
+            --certificate-identity-regexp "^https://github.com/${{ github.repository }}/" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com
+          cosign verify-attestation --type slsaprovenance "$IMG" \
+            --certificate-identity-regexp "^https://github.com/slsa-framework/slsa-github-generator/" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com
+          echo "✅ firma + SBOM + provenance SLSA L3 verificados"

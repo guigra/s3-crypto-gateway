@@ -1,0 +1,9 @@
+# binarios y artefactos
+s3-crypto-gateway
+*.test
+sbom/
+
+# claves — NUNCA commitear
+*.key
+cosign.pass
+.env
