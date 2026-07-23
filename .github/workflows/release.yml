@@ -36,7 +36,13 @@ jobs:
           IMG: ghcr.io/${{ github.repository }}@${{ steps.push.outputs.digest }}
         run: |
           cosign sign --yes "$IMG"
-          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b .
+          # Trivy PINEADO por versión + SHA-256 (asset inmutable; sin curl|sh de ramas mutables
+          # dentro del job firmante — hallazgo de la revisión de seguridad)
+          TRIVY_VERSION=0.72.0
+          TRIVY_SHA256=bbb64b9695866ce4a7a8f5c9592002c5961cab378577fa3f8a040df362b9b2ea
+          curl -sfL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" -o trivy.tgz
+          echo "${TRIVY_SHA256}  trivy.tgz" | sha256sum -c -
+          tar xzf trivy.tgz trivy
           ./trivy image --format cyclonedx --output sbom.cdx.json "$IMG" --quiet
           cosign attest --yes --type cyclonedx --predicate sbom.cdx.json "$IMG"
 
