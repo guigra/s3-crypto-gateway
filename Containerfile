@@ -3,10 +3,10 @@
 FROM golang:1.25-bookworm AS build
 WORKDIR /src
 # Build REPRODUCIBLE: go.sum fijado + -mod=readonly (falla si el sum no cuadra, no re-tidy).
-# govulncheck: limpio (no requiere bump de x/net; se queda en go 1.22).
 COPY go.mod go.sum ./
 RUN go mod download && go mod verify
 COPY *.go ./
+COPY pkg/ pkg/
 ENV CGO_ENABLED=0 GOOS=linux GOARCH=amd64
 RUN go build -trimpath -mod=readonly -ldflags="-s -w" -o /s3-crypto-gateway .
 
