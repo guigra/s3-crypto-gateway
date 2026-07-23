@@ -1,0 +1,15 @@
+# Dependabot: mantiene frescos los pins (módulos Go, actions y digests de imágenes base).
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker # bumps de los FROM pineados por digest del Containerfile
+    directory: /
+    schedule:
+      interval: weekly

@@ -23,13 +23,17 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # Build REPRODUCIBLE: mismo commit → mismo digest (re-runs no crean imágenes huérfanas).
+      # Piezas: SOURCE_DATE_EPOCH = fecha del commit + rewrite-timestamp + bases pineadas por digest.
+      - name: timestamp determinista
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> "$GITHUB_ENV"
       - uses: docker/build-push-action@v6
         id: push
         with:
           context: .
           file: Containerfile
-          push: true
           tags: ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          outputs: type=image,rewrite-timestamp=true,push=true
       - uses: sigstore/cosign-installer@v3
       - name: firma keyless + SBOM attestado
         env:
