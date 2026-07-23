@@ -17,8 +17,8 @@ jobs:
     outputs:
       digest: ${{ steps.push.outputs.digest }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -27,14 +27,14 @@ jobs:
       # Piezas: SOURCE_DATE_EPOCH = fecha del commit + rewrite-timestamp + bases pineadas por digest.
       - name: timestamp determinista
         run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> "$GITHUB_ENV"
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         id: push
         with:
           context: .
           file: Containerfile
           tags: ghcr.io/${{ github.repository }}:${{ github.ref_name }}
           outputs: type=image,rewrite-timestamp=true,push=true
-      - uses: sigstore/cosign-installer@v3
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
       - name: firma keyless + SBOM attestado
         env:
           IMG: ghcr.io/${{ github.repository }}@${{ steps.push.outputs.digest }}
@@ -70,8 +70,8 @@ jobs:
     permissions:
       packages: read
     steps:
-      - uses: sigstore/cosign-installer@v3
-      - uses: docker/login-action@v3
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}

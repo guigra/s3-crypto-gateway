@@ -1,0 +1,23 @@
+name: codeql
+# Análisis estático CodeQL del código Go (SAST; gratis en repos públicos).
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '30 5 * * 1' # semanal: también caza queries nuevas de CodeQL
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: github/codeql-action/init@4187e74d05793876e9989daffde9c3e66b4acd07 # v3
+        with:
+          languages: go
+          build-mode: none
+      - uses: github/codeql-action/analyze@4187e74d05793876e9989daffde9c3e66b4acd07 # v3
