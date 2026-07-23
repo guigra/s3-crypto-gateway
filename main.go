@@ -165,7 +165,9 @@ func (gw *Gateway) del(ctx context.Context, w http.ResponseWriter, bucket, key s
 func (gw *Gateway) list(ctx context.Context, w http.ResponseWriter, r *http.Request, bucket string) {
 	q := r.URL.Query()
 	maxKeys := int32(0)
-	if v, e := strconv.Atoi(q.Get("max-keys")); e == nil {
+	// ParseInt con bitSize 32: rechaza valores fuera de rango int32 (el Atoi previo
+	// permitía overflow con un max-keys hostil — hallazgo de CodeQL).
+	if v, e := strconv.ParseInt(q.Get("max-keys"), 10, 32); e == nil && v > 0 {
 		maxKeys = int32(v)
 	}
 	out, err := gw.s3.List(ctx, bucket, q.Get("prefix"), q.Get("continuation-token"), q.Get("delimiter"), maxKeys)
