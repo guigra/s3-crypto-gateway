@@ -107,6 +107,14 @@ cosign verify ghcr.io/guigra/s3-crypto-gateway@<digest> \
 A `Jenkinsfile` is included for corporate environments (key-based signing via
 `tools/ci/attest.sh` — same chain, no OIDC required).
 
+## Security review
+
+The accepted findings, compatibility constraints and remediation roadmap from
+the 2026-07-25 security review are tracked in
+[`docs/security-review-2026-07-25.md`](docs/security-review-2026-07-25.md).
+The document distinguishes immediate compatible fixes from the coordinated
+SigV4 and CLPE2 design work.
+
 ## License
 
 [MIT](LICENSE) © 2026 Ricardo Guillén Gracia.
