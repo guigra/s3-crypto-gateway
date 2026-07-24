@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"encoding/base64"
 	"testing"
+	"time"
 )
 
 func TestTenantOf(t *testing.T) {
@@ -65,5 +66,63 @@ func TestSSEC(t *testing.T) {
 	sum := md5.Sum(key)
 	if s.KeyMD5B64 != base64.StdEncoding.EncodeToString(sum[:]) {
 		t.Error("KeyMD5B64 incorrecta")
+	}
+}
+
+func TestLoadConfigRejectsInvalidSSEC(t *testing.T) {
+	t.Setenv("SSEC_ENABLED", "true")
+	t.Setenv("SSEC_KEY", "no-base64")
+	if _, err := loadConfig(); err == nil {
+		t.Fatal("SSE-C habilitado con clave inválida debería impedir el arranque")
+	}
+
+	t.Setenv("SSEC_KEY", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{1}, 32)))
+	cfg, err := loadConfig()
+	if err != nil {
+		t.Fatalf("configuración SSE-C válida: %v", err)
+	}
+	if cfg.ssec() == nil {
+		t.Fatal("SSE-C válido debería estar activo")
+	}
+}
+
+func TestLoadConfigRejectsInvalidValues(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{"ENC_ENABLED", "enabled"},
+		{"MAX_OBJECT_BYTES", "0"},
+		{"READ_HEADER_TIMEOUT", "-1s"},
+		{"READ_TIMEOUT", "mañana"},
+		{"WRITE_TIMEOUT", "0s"},
+		{"IDLE_TIMEOUT", "0"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(tc.name, tc.value)
+			if _, err := loadConfig(); err == nil {
+				t.Fatalf("%s=%q debería rechazarse", tc.name, tc.value)
+			}
+		})
+	}
+}
+
+func TestLoadConfigLimitsAndTimeouts(t *testing.T) {
+	t.Setenv("MAX_OBJECT_BYTES", "4096")
+	t.Setenv("READ_HEADER_TIMEOUT", "3s")
+	t.Setenv("READ_TIMEOUT", "4s")
+	t.Setenv("WRITE_TIMEOUT", "5s")
+	t.Setenv("IDLE_TIMEOUT", "6s")
+	cfg, err := loadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MaxObjectBytes != 4096 ||
+		cfg.ReadHeaderTimeout != 3*time.Second ||
+		cfg.ReadTimeout != 4*time.Second ||
+		cfg.WriteTimeout != 5*time.Second ||
+		cfg.IdleTimeout != 6*time.Second {
+		t.Fatalf("límites inesperados: %+v", cfg)
 	}
 }

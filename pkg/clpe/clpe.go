@@ -28,6 +28,11 @@ const (
 	clpeVersion = 1
 	ivLen       = 12 // nonce GCM
 	dekLen      = 32 // AES-256
+	gcmTagLen   = 16
+
+	// MaxEnvelopeOverhead is the largest number of bytes CLPE1 adds to a
+	// plaintext (using the maximum 255-byte tenant).
+	MaxEnvelopeOverhead = 4 + 1 + 1 + 255 + ivLen + 2 + (dekLen + gcmTagLen) + ivLen + gcmTagLen
 )
 
 // KekFn returns the 32-byte KEK for a tenant.
@@ -36,6 +41,15 @@ type KekFn func(tenant string) ([]byte, error)
 // IsEnvelope reports whether b starts with the CLPE magic (e.g. to decide
 // whether a fetched object needs decryption).
 func IsEnvelope(b []byte) bool { return len(b) >= 4 && string(b[:4]) == "CLPE" }
+
+// Tenant returns the tenant encoded in a structurally valid CLPE header.
+func Tenant(env []byte) (string, error) {
+	parsed, err := parseEnvelope(env)
+	if err != nil {
+		return "", err
+	}
+	return parsed.tenant, nil
+}
 
 // Encrypt seals pt into a CLPE envelope under the tenant's KEK.
 func Encrypt(pt []byte, tenant string, kekFor KekFn) ([]byte, error) {
@@ -86,21 +100,51 @@ func Encrypt(pt []byte, tenant string, kekFor KekFn) ([]byte, error) {
 // Decrypt opens a CLPE envelope. It fails if the envelope was tampered with
 // or the KEK is wrong.
 func Decrypt(env []byte, kekFor KekFn) ([]byte, error) {
+	parsed, err := parseEnvelope(env)
+	if err != nil {
+		return nil, err
+	}
+	kek, err := kekFor(parsed.tenant)
+	if err != nil {
+		return nil, err
+	}
+	if len(kek) != dekLen {
+		return nil, errors.New("KEK debe ser de 32 bytes")
+	}
+	dek, err := gcmOpen(kek, parsed.ivDek, parsed.dekCt)
+	if err != nil {
+		return nil, errors.New("fallo al desenvolver la DEK (¿KEK errónea o sobre manipulado?)")
+	}
+	return gcmOpen(dek, parsed.ivData, parsed.dataCt)
+}
+
+type parsedEnvelope struct {
+	tenant string
+	ivDek  []byte
+	dekCt  []byte
+	ivData []byte
+	dataCt []byte
+}
+
+func parseEnvelope(env []byte) (parsedEnvelope, error) {
 	if !IsEnvelope(env) {
-		return nil, errors.New("magic CLPE inválido")
+		return parsedEnvelope{}, errors.New("magic CLPE inválido")
 	}
 	p := 4
+	if p >= len(env) {
+		return parsedEnvelope{}, errors.New("sobre truncado (versión)")
+	}
 	if env[p] != clpeVersion {
-		return nil, errors.New("versión CLPE no soportada")
+		return parsedEnvelope{}, errors.New("versión CLPE no soportada")
 	}
 	p++
 	if p >= len(env) {
-		return nil, errors.New("sobre truncado (tenantLen)")
+		return parsedEnvelope{}, errors.New("sobre truncado (tenantLen)")
 	}
 	tLen := int(env[p])
 	p++
 	if p+tLen+ivLen+2 > len(env) {
-		return nil, errors.New("sobre truncado (cabecera)")
+		return parsedEnvelope{}, errors.New("sobre truncado (cabecera)")
 	}
 	tenant := string(env[p : p+tLen])
 	p += tLen
@@ -109,26 +153,14 @@ func Decrypt(env []byte, kekFor KekFn) ([]byte, error) {
 	dekCtLen := int(binary.BigEndian.Uint16(env[p : p+2]))
 	p += 2
 	if p+dekCtLen+ivLen > len(env) {
-		return nil, errors.New("sobre truncado (dekCt/ivData)")
+		return parsedEnvelope{}, errors.New("sobre truncado (dekCt/ivData)")
 	}
 	dekCt := env[p : p+dekCtLen]
 	p += dekCtLen
 	ivData := env[p : p+ivLen]
 	p += ivLen
 	dataCt := env[p:]
-
-	kek, err := kekFor(tenant)
-	if err != nil {
-		return nil, err
-	}
-	if len(kek) != dekLen {
-		return nil, errors.New("KEK debe ser de 32 bytes")
-	}
-	dek, err := gcmOpen(kek, ivDek, dekCt)
-	if err != nil {
-		return nil, errors.New("fallo al desenvolver la DEK (¿KEK errónea o sobre manipulado?)")
-	}
-	return gcmOpen(dek, ivData, dataCt)
+	return parsedEnvelope{tenant: tenant, ivDek: ivDek, dekCt: dekCt, ivData: ivData, dataCt: dataCt}, nil
 }
 
 // --- helpers AES-GCM ---

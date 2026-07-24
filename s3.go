@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 
@@ -14,6 +16,8 @@ import (
 // S3 es el backend a Hetzner — MISMO cliente que gateway-go (BaseEndpoint + UsePathStyle + creds
 // del SDK por env: AWS_ENDPOINT_URL/AWS_REGION/AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY).
 type S3 struct{ c *s3.Client }
+
+var ErrObjectTooLarge = errors.New("objeto supera el tamaño máximo configurado")
 
 func newS3() (*S3, error) {
 	cfg, err := awscfg.LoadDefaultConfig(context.Background(),
@@ -32,7 +36,7 @@ func newS3() (*S3, error) {
 }
 
 // Get devuelve cuerpo + metadata de usuario + content-type del objeto.
-func (b *S3) Get(ctx context.Context, bucket, key string, sse *SSEC) ([]byte, map[string]string, string, error) {
+func (b *S3) Get(ctx context.Context, bucket, key string, sse *SSEC, maxBytes int64) ([]byte, map[string]string, string, error) {
 	in := &s3.GetObjectInput{Bucket: &bucket, Key: &key}
 	if sse != nil {
 		in.SSECustomerAlgorithm, in.SSECustomerKey, in.SSECustomerKeyMD5 = &sse.Algorithm, &sse.KeyB64, &sse.KeyMD5B64
@@ -42,7 +46,13 @@ func (b *S3) Get(ctx context.Context, bucket, key string, sse *SSEC) ([]byte, ma
 		return nil, nil, "", err
 	}
 	defer out.Body.Close()
-	body, err := io.ReadAll(out.Body)
+	if out.ContentLength != nil && *out.ContentLength > maxBytes {
+		return nil, nil, "", fmt.Errorf("%w: tamaño=%d límite=%d", ErrObjectTooLarge, *out.ContentLength, maxBytes)
+	}
+	body, err := io.ReadAll(io.LimitReader(out.Body, maxBytes+1))
+	if err == nil && int64(len(body)) > maxBytes {
+		err = fmt.Errorf("%w: límite=%d", ErrObjectTooLarge, maxBytes)
+	}
 	ct := ""
 	if out.ContentType != nil {
 		ct = *out.ContentType

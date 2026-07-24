@@ -1,7 +1,8 @@
 # Revisión de seguridad y registro de decisiones
 
 - **Fecha:** 2026-07-25
-- **Estado:** hallazgos aceptados; remediación pendiente
+- **Estado:** Fase 1 implementada en `security/remediation-phase1`, pendiente de
+  revisión, CI y merge
 - **Alcance:** gateway HTTP/S3, configuración, gestión de claves, formato CLPE,
   cliente S3 y cadena de suministro
 - **Componentes revisados:** `main.go`, `config.go`, `keys.go`, `s3.go`,
@@ -283,3 +284,5 @@ compatible ni una prueba de penetración del despliegue real.
 | 2026-07-25 | Auditoría inicial completada; siete hallazgos identificados. |
 | 2026-07-25 | Equipo de seguridad verifica los siete hallazgos y aprueba el plan con separación explícita de SigV4 y CLPE2. |
 | 2026-07-25 | Se documentan decisiones y fases; todavía no se han integrado remediaciones de código. |
+| 2026-07-25 | Se inicia la Fase 1 en `security/remediation-phase1`: parser seguro, límites/timeouts, SSE-C fail-closed, vínculo tenant-ruta y errores sanitizados. |
+| 2026-07-25 | Implementación de Fase 1 completada en la rama; build, vet, tests, race, fuzzing y `govulncheck` superados. Pendiente de revisión y CI remoto. |

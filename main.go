@@ -7,9 +7,11 @@ package main
 import (
 	"context"
 	"crypto/md5"
+	"crypto/rand"
 	"encoding/hex"
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -36,7 +38,10 @@ type Gateway struct {
 }
 
 func main() {
-	cfg := loadConfig()
+	cfg, err := loadConfig()
+	if err != nil {
+		log.Fatalf("configuración inválida: %v", err)
+	}
 	backend, err := newS3()
 	if err != nil {
 		log.Fatalf("no se pudo crear el cliente S3: %v", err)
@@ -52,7 +57,15 @@ func main() {
 
 	log.Printf("crypto-gateway :%s  encrypt=%v tenants=%v prefixes=%v  endpoint=%s",
 		cfg.Port, cfg.EncEnabled, cfg.EncTenants, cfg.EncPrefixes, env("AWS_ENDPOINT_URL", ""))
-	log.Fatal(http.ListenAndServe(":"+cfg.Port, mux))
+	server := &http.Server{
+		Addr:              ":" + cfg.Port,
+		Handler:           mux,
+		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+		ReadTimeout:       cfg.ReadTimeout,
+		WriteTimeout:      cfg.WriteTimeout,
+		IdleTimeout:       cfg.IdleTimeout,
+	}
+	log.Fatal(server.ListenAndServe())
 }
 
 // handle: enruta path-style /{bucket}/{key...}.
@@ -82,9 +95,14 @@ func (gw *Gateway) handle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (gw *Gateway) put(ctx context.Context, w http.ResponseWriter, r *http.Request, bucket, key string) {
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, gw.cfg.MaxObjectBytes))
 	if err != nil {
-		s3err(w, 400, "InvalidRequest", err.Error())
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			s3err(w, http.StatusRequestEntityTooLarge, "EntityTooLarge", "el objeto supera el tamaño máximo permitido")
+			return
+		}
+		internalErr(w, 400, "InvalidRequest", "no se pudo leer el cuerpo de la petición", err)
 		return
 	}
 	etag := md5hex(body) // ETag = md5 del PLANTEXT recibido -> la validación del cliente cuadra
@@ -93,14 +111,14 @@ func (gw *Gateway) put(ctx context.Context, w http.ResponseWriter, r *http.Reque
 	if gw.cfg.encEnabled(key) {
 		enc, err := clpe.Encrypt(body, tenantOf(key), KekFor)
 		if err != nil {
-			s3err(w, 500, "EncryptError", err.Error())
+			internalErr(w, 500, "EncryptError", "no se pudo cifrar el objeto", err)
 			return
 		}
 		body = enc
 		meta["clp-enc"] = "CLPE1" // marca; el GET detecta por el magic igualmente
 	}
 	if err := gw.s3.Put(ctx, bucket, key, body, meta, ct, gw.cfg.ssec()); err != nil {
-		s3err(w, 502, "UpstreamError", err.Error())
+		internalErr(w, 502, "UpstreamError", "el backend S3 no pudo completar la operación", err)
 		return
 	}
 	w.Header().Set("ETag", `"`+etag+`"`)
@@ -108,19 +126,28 @@ func (gw *Gateway) put(ctx context.Context, w http.ResponseWriter, r *http.Reque
 }
 
 func (gw *Gateway) get(ctx context.Context, w http.ResponseWriter, bucket, key string) {
-	body, meta, ct, err := gw.s3.Get(ctx, bucket, key, gw.cfg.ssec())
+	maxBackendBytes := gw.cfg.MaxObjectBytes + clpe.MaxEnvelopeOverhead
+	body, meta, ct, err := gw.s3.Get(ctx, bucket, key, gw.cfg.ssec(), maxBackendBytes)
 	if err != nil {
 		gw.upstreamErr(w, err)
 		return
 	}
 	if clpe.IsEnvelope(body) {
+		if tenantErr := validateEnvelopeTenant(body, key); tenantErr != nil {
+			internalErr(w, 500, "DecryptError", "no se pudo descifrar el objeto", tenantErr)
+			return
+		}
 		pt, derr := clpe.Decrypt(body, KekFor)
 		if derr != nil {
-			s3err(w, 500, "DecryptError", derr.Error())
+			internalErr(w, 500, "DecryptError", "no se pudo descifrar el objeto", derr)
 			return
 		}
 		body = pt
 		delete(meta, "clp-enc")
+	}
+	if int64(len(body)) > gw.cfg.MaxObjectBytes {
+		s3err(w, http.StatusRequestEntityTooLarge, "EntityTooLarge", "el objeto supera el tamaño máximo permitido")
+		return
 	}
 	if ct != "" {
 		w.Header().Set("Content-Type", ct)
@@ -201,7 +228,11 @@ func (gw *Gateway) upstreamErr(w http.ResponseWriter, err error) {
 		s3err(w, 404, "NoSuchKey", "objeto no encontrado")
 		return
 	}
-	s3err(w, 502, "UpstreamError", err.Error())
+	if errors.Is(err, ErrObjectTooLarge) {
+		s3err(w, http.StatusRequestEntityTooLarge, "EntityTooLarge", "el objeto supera el tamaño máximo permitido")
+		return
+	}
+	internalErr(w, 502, "UpstreamError", "el backend S3 no pudo completar la operación", err)
 }
 
 // --- XML ---
@@ -239,6 +270,33 @@ func s3err(w http.ResponseWriter, status int, code, msg string) {
 	w.WriteHeader(status)
 	_, _ = w.Write([]byte(xml.Header))
 	_ = xml.NewEncoder(w).Encode(s3errBody{Code: code, Message: msg})
+}
+
+func internalErr(w http.ResponseWriter, status int, code, publicMessage string, err error) {
+	requestID := requestID()
+	log.Printf("request_id=%s code=%s error=%v", requestID, code, err)
+	w.Header().Set("X-Amz-Request-Id", requestID)
+	s3err(w, status, code, publicMessage)
+}
+
+func requestID() string {
+	var id [8]byte
+	if _, err := io.ReadFull(rand.Reader, id[:]); err != nil {
+		return "unavailable"
+	}
+	return hex.EncodeToString(id[:])
+}
+
+func validateEnvelopeTenant(envelope []byte, key string) error {
+	envelopeTenant, err := clpe.Tenant(envelope)
+	if err != nil {
+		return err
+	}
+	routeTenant := tenantOf(key)
+	if envelopeTenant != routeTenant {
+		return fmt.Errorf("tenant del sobre %q no coincide con tenant de ruta %q", envelopeTenant, routeTenant)
+	}
+	return nil
 }
 
 // userMeta: cabeceras X-Amz-Meta-<k> -> map (clave en minúsculas, sin el prefijo).
