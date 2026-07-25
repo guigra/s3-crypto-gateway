@@ -304,6 +304,55 @@ automatizada.
 - pruebas de rendimiento y compatibilidad;
 - plan de rollout y rollback aprobado.
 
+## Evaluación de los mantenedores e input para la decisión (2026-07-25)
+
+> Estado: **input, no decisión cerrada**. La decisión final es de los mantenedores.
+
+**Valoración general — sólido.** Respaldamos los aciertos: SigV4 como elección
+correcta para clientes S3 (interop), deny-by-default sin regla vacía = todo,
+disciplina de canonicalización con **vectores oficiales** (el footgun nº1 de
+SigV4), realismo anti-replay (no romper reintentos de SDK), secretos recuperables
+separados del backend con rotación solapada, contención de ámbito en LIST
+(prefix/delimiter/continuation-token) y rollout sin flag de bypass silencioso.
+
+**Input 1 — proporcionalidad al despliegue real (mTLS-first por fases).** El ADR
+está escrito para el caso general (endpoint S3 potencialmente expuesto / multi-tenant
+/ terceros). El despliegue real de `clp-log-tier` es otro: el gateway es la frontera
+S3 **interna** de unos pocos clientes de **primera parte** (gateway-go, phase2, search,
+lifecycle) en el mismo dominio de confianza, tras NetworkPolicy + egress FortiProxy.
+Para ese caso proponemos **fasear por exposición**:
+
+- **Fase A (interno, hoy):** **mTLS del mesh** (OpenShift ya trae SPIFFE/cert-manager)
+  como control **primario** + credenciales de backend de mínimo privilegio +
+  NetworkPolicy (ya). Cierra el gap "cualquier llamante hereda las creds del backend"
+  de forma proporcional, **sin** secretos compartidos que custodiar ni canonicalización
+  SigV4. Nota: SigV4 obliga al gateway a **guardar los secret access keys de los
+  clientes** (para el HMAC) → se vuelve un almacén de secretos = objetivo; mTLS (clave
+  pública) lo evita.
+- **Fase B (exposición / multi-tenant / terceros):** SigV4 + authz por
+  bucket/prefix/tenant, exactamente como describe este ADR. **El ADR del equipo ES la
+  Fase B**; solo proponemos no construirla entera si el despliegue aún no la necesita.
+
+El ADR ya contempla "SigV4 sin mTLS como etapa de rollout"; para el caso interno
+**invertimos el orden** (mTLS primero).
+
+**Input 2 — capas y CLPE2.** Cuando exista authz por principal→tenant, la comprobación
+de tenant del gateway y el AAD de CLPE2 (atado a ruta) pasan a ser **defensa en
+profundidad bajo la authz** (la authz es el control primario de aislamiento;
+CLPE2/AAD atrapan errores/bypass). El punto 6 de §Objetos ya lo respeta.
+
+**Input 3 — alcance del AAD (cierra IR-02).** Recomendación de los mantenedores:
+**AAD = `objectKey` únicamente, NO `bucket`**. Motivos: (a) el despliegue es
+efectivamente single-bucket por config → el replay cross-bucket no está en el modelo
+de amenaza; (b) atar el bucket añade acoplamiento **frágil** — productor y consumidor
+deben coincidir en la cadena EXACTA del bucket, y el appender sube directo a S3
+mientras el gateway proxea (el nombre de bucket podría divergir → fallos de descifrado
+espurios). La 3ª opción ("identificador lógico estable") se descarta por complejidad
+(habría que derivar el mismo ID lógico en ambos lados; más frágil que la key física).
+Se cierra **ahora** que no hay datos CLPE2 persistentes; si el despliegue se vuelve
+multi-bucket con movimiento entre buckets como riesgo real, se añade en CLPE3/flag.
+Detalle del formato: `clp-log-tier/docs/superpowers/specs/2026-07-25-clpe2-aad-binding-design.md`.
+
 ## Referencias internas
 
 - [`../deployment-security.md`](../deployment-security.md)
