@@ -138,6 +138,11 @@ Deployment trust assumptions and the included restrictive Kubernetes
 NetworkPolicy are documented in
 [`docs/deployment-security.md`](docs/deployment-security.md).
 
+The proposed inbound SigV4, mTLS and authorization architecture is tracked in
+[`ADR-0001`](docs/adr/0001-inbound-authentication-and-authorization.md).
+The post-merge review and its CLPE2 migration decisions are recorded in
+[`docs/integration-review-2026-07-25.md`](docs/integration-review-2026-07-25.md).
+
 ## License
 
 [MIT](LICENSE) © 2026 Ricardo Guillén Gracia.
