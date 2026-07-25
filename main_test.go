@@ -66,3 +66,61 @@ func TestInternalErrorIsSanitized(t *testing.T) {
 		t.Fatal("falta el identificador de correlación")
 	}
 }
+
+func TestUnsupportedFeatures(t *testing.T) {
+	tests := []struct {
+		name    string
+		method  string
+		target  string
+		headers map[string]string
+	}{
+		{"range", http.MethodGet, "/bucket/key", map[string]string{"Range": "bytes=0-9"}},
+		{"conditional", http.MethodGet, "/bucket/key", map[string]string{"If-Match": `"etag"`}},
+		{"copy", http.MethodPut, "/bucket/key", map[string]string{"X-Amz-Copy-Source": "/source/key"}},
+		{"multipart-init", http.MethodPost, "/bucket/key?uploads=", nil},
+		{"multipart-part", http.MethodPut, "/bucket/key?partNumber=1&uploadId=id", nil},
+		{"version", http.MethodGet, "/bucket/key?versionId=id", nil},
+		{"checksum", http.MethodPut, "/bucket/key", map[string]string{"X-Amz-Checksum-Sha256": "value"}},
+		{"acl-header", http.MethodPut, "/bucket/key", map[string]string{"X-Amz-Acl": "private"}},
+		{"client-sse", http.MethodPut, "/bucket/key", map[string]string{"X-Amz-Server-Side-Encryption": "AES256"}},
+		{"content-encoding", http.MethodPut, "/bucket/key", map[string]string{"Content-Encoding": "gzip"}},
+		{"head-bucket", http.MethodHead, "/bucket", nil},
+		{"create-bucket", http.MethodPut, "/bucket", nil},
+		{"list-v1", http.MethodGet, "/bucket", nil},
+		{"list-v2-extra", http.MethodGet, "/bucket?list-type=2&fetch-owner=true", nil},
+	}
+	gw := &Gateway{}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			request := httptest.NewRequest(tc.method, tc.target, nil)
+			for name, value := range tc.headers {
+				request.Header.Set(name, value)
+			}
+			response := httptest.NewRecorder()
+
+			gw.handle(response, request)
+
+			if response.Code != http.StatusNotImplemented {
+				t.Fatalf("status=%d, want %d; body=%s", response.Code, http.StatusNotImplemented, response.Body.String())
+			}
+			if !strings.Contains(response.Body.String(), "NotImplemented") {
+				t.Fatalf("respuesta inesperada: %s", response.Body.String())
+			}
+		})
+	}
+}
+
+func TestInvalidRootPath(t *testing.T) {
+	response := httptest.NewRecorder()
+	(&Gateway{}).handle(response, httptest.NewRequest(http.MethodGet, "/", nil))
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d, want %d", response.Code, http.StatusBadRequest)
+	}
+}
+
+func TestListV2ContractIsAccepted(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/bucket?list-type=2&prefix=logs/&max-keys=10", nil)
+	if feature := unsupportedFeature(request, ""); feature != "" {
+		t.Fatalf("ListObjectsV2 válido rechazado: %s", feature)
+	}
+}

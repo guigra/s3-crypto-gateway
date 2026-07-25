@@ -75,6 +75,14 @@ func (gw *Gateway) handle(w http.ResponseWriter, r *http.Request) {
 	if i := strings.IndexByte(p, '/'); i >= 0 {
 		bucket, key = p[:i], p[i+1:]
 	}
+	if bucket == "" {
+		s3err(w, http.StatusBadRequest, "InvalidURI", "la ruta debe incluir un bucket")
+		return
+	}
+	if feature := unsupportedFeature(r, key); feature != "" {
+		s3err(w, http.StatusNotImplemented, "NotImplemented", "función S3 no soportada: "+feature)
+		return
+	}
 	ctx := r.Context()
 	switch r.Method {
 	case http.MethodPut:
@@ -89,9 +97,77 @@ func (gw *Gateway) handle(w http.ResponseWriter, r *http.Request) {
 		gw.head(ctx, w, bucket, key)
 	case http.MethodDelete:
 		gw.del(ctx, w, bucket, key)
+	case http.MethodPost:
+		s3err(w, http.StatusNotImplemented, "NotImplemented", "las operaciones S3 mediante POST no están soportadas")
 	default:
 		s3err(w, 405, "MethodNotAllowed", "método no soportado")
 	}
+}
+
+func unsupportedFeature(r *http.Request, key string) string {
+	if key == "" {
+		if r.Method == http.MethodGet && r.URL.Query().Get("list-type") == "2" {
+			// ListObjectsV2 is the only supported bucket-level operation.
+		} else {
+			return "operación a nivel de bucket"
+		}
+	}
+
+	for _, header := range []string{
+		"Range",
+		"If-Match",
+		"If-None-Match",
+		"If-Modified-Since",
+		"If-Unmodified-Since",
+		"X-Amz-Copy-Source",
+		"X-Amz-Sdk-Checksum-Algorithm",
+		"X-Amz-Checksum-Mode",
+		"Content-Md5",
+		"Content-Encoding",
+		"Content-Disposition",
+		"Cache-Control",
+		"Expires",
+	} {
+		if r.Header.Get(header) != "" {
+			return "cabecera " + header
+		}
+	}
+	for header := range r.Header {
+		lowerHeader := strings.ToLower(header)
+		if strings.HasPrefix(lowerHeader, "x-amz-checksum-") {
+			return "checksums S3"
+		}
+		for _, unsupportedPrefix := range []string{
+			"x-amz-acl",
+			"x-amz-grant-",
+			"x-amz-object-lock-",
+			"x-amz-server-side-encryption",
+			"x-amz-storage-class",
+			"x-amz-tagging",
+			"x-amz-website-redirect-location",
+			"x-amz-request-payer",
+			"x-amz-expected-bucket-owner",
+		} {
+			if strings.HasPrefix(lowerHeader, unsupportedPrefix) {
+				return "cabecera " + header
+			}
+		}
+	}
+
+	supportedListQuery := map[string]bool{
+		"list-type":          true,
+		"prefix":             true,
+		"continuation-token": true,
+		"delimiter":          true,
+		"max-keys":           true,
+	}
+	for query := range r.URL.Query() {
+		if key == "" && r.Method == http.MethodGet && r.URL.Query().Get("list-type") == "2" && supportedListQuery[query] {
+			continue
+		}
+		return "parámetro " + query
+	}
+	return ""
 }
 
 func (gw *Gateway) put(ctx context.Context, w http.ResponseWriter, r *http.Request, bucket, key string) {

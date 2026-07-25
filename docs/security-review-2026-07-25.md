@@ -1,8 +1,8 @@
 # Revisión de seguridad y registro de decisiones
 
 - **Fecha:** 2026-07-25
-- **Estado:** Fase 1 implementada en `security/remediation-phase1`, pendiente de
-  revisión, CI y merge
+- **Estado:** Fase 1 integrada en `main`; Fase 2 implementada en
+  `feature/phase2-s3-contract`, pendiente de revisión, CI y merge
 - **Alcance:** gateway HTTP/S3, configuración, gestión de claves, formato CLPE,
   cliente S3 y cadena de suministro
 - **Componentes revisados:** `main.go`, `config.go`, `keys.go`, `s3.go`,
@@ -286,3 +286,5 @@ compatible ni una prueba de penetración del despliegue real.
 | 2026-07-25 | Se documentan decisiones y fases; todavía no se han integrado remediaciones de código. |
 | 2026-07-25 | Se inicia la Fase 1 en `security/remediation-phase1`: parser seguro, límites/timeouts, SSE-C fail-closed, vínculo tenant-ruta y errores sanitizados. |
 | 2026-07-25 | Implementación de Fase 1 completada en la rama; build, vet, tests, race, fuzzing y `govulncheck` superados. Pendiente de revisión y CI remoto. |
+| 2026-07-25 | Se inicia la Fase 2 en `feature/phase2-s3-contract`, aislada del trabajo CLPE2: contrato S3, rechazo explícito, frontera de confianza y NetworkPolicy. |
+| 2026-07-25 | Implementación de Fase 2 completada en la rama; build, vet, tests y race superados. Pendiente de revisión y CI remoto. |

@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: s3-crypto-gateway-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: s3-crypto-gateway
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              s3-crypto-gateway-access: "true"
+          podSelector:
+            matchLabels:
+              s3-crypto-gateway-access: "true"
+      ports:
+        - protocol: TCP
+          port: 9000

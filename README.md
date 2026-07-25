@@ -1,11 +1,16 @@
 # s3-crypto-gateway
 
-**Zero-knowledge client-side encryption for any S3-compatible storage — as a transparent proxy.**
+**Client-side encryption gateway for a documented subset of the S3 API.**
 
-Point your S3 client at this gateway instead of your provider. **PUT → encrypts**,
-**GET → decrypts**, HEAD/LIST/DELETE pass through. Your provider (AWS, Hetzner,
-MinIO, Garage, Ceph…) only ever sees ciphertext. No SDK changes, no app changes:
-it speaks the S3 API on both sides and re-signs requests with real credentials.
+Point a compatible, explicitly tested S3 client at this gateway instead of your
+provider. **PUT → encrypts**, **GET → decrypts**, and the supported HEAD, LIST
+and DELETE operations pass through. Your provider only sees ciphertext for
+objects selected by the encryption policy.
+
+> **Trust boundary:** the gateway does not authenticate clients or validate
+> SigV4. Any caller that can reach it can exercise the configured backend
+> credentials. Keep it on a restricted network and read
+> [`docs/deployment-security.md`](docs/deployment-security.md) before deployment.
 
 ```
 ┌────────────┐   S3 API (plain)   ┌───────────────────┐   S3 API (ciphertext)   ┌─────────────┐
@@ -19,7 +24,10 @@ it speaks the S3 API on both sides and re-signs requests with real credentials.
 - **Sovereignty / zero-knowledge**: encryption keys never leave your infrastructure.
   The storage provider cannot read your data — validated: raw GET returns
   ciphertext (or HTTP 400 with the optional SSE-C layer enabled).
-- **No application changes**: any S3 client works (AWS SDK, boto3, aws cli, rclone).
+- **S3-compatible subset**: simple PUT/GET/HEAD/DELETE and ListObjectsV2 are
+  supported. Range, multipart, conditional requests, CopyObject, versioning and
+  checksums are rejected explicitly. See
+  [`docs/s3-api-contract.md`](docs/s3-api-contract.md).
 - **Selective**: encrypt everything, or scope by key prefix and/or tenant.
 - **Two stackable layers**: an AES-256-GCM envelope (this gateway holds the keys)
   plus optional S3 SSE-C headers (provider encrypts at rest with a key it does not store).
@@ -121,6 +129,10 @@ the 2026-07-25 security review are tracked in
 [`docs/security-review-2026-07-25.md`](docs/security-review-2026-07-25.md).
 The document distinguishes immediate compatible fixes from the coordinated
 SigV4 and CLPE2 design work.
+
+Deployment trust assumptions and the included restrictive Kubernetes
+NetworkPolicy are documented in
+[`docs/deployment-security.md`](docs/deployment-security.md).
 
 ## License
 
