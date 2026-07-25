@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"math"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -28,6 +29,7 @@ type Config struct {
 	EncEnabled        bool
 	EncTenants        []string // vacío = todos los tenants
 	EncPrefixes       []string // vacío = todos los prefijos (p. ej. "ir-go/,archives/")
+	AllowedBuckets    []string // vacío = sin restricción en proceso; exigir mínimo privilegio IAM
 	SSECEnabled       bool
 	SSECKey           []byte // clave SSE-C de 32 bytes (la misma para PUT/GET; Hetzner no la guarda)
 	MaxObjectBytes    int64
@@ -57,6 +59,13 @@ func loadConfig() (Config, error) {
 		ReadTimeout:       defaultReadTimeout,
 		WriteTimeout:      defaultWriteTimeout,
 		IdleTimeout:       defaultIdleTimeout,
+	}
+	if raw, present := os.LookupEnv("ALLOWED_BUCKETS"); present {
+		c.AllowedBuckets = splitCSV(raw)
+		if raw != "" && len(c.AllowedBuckets) == 0 {
+			return Config{}, fmt.Errorf("ALLOWED_BUCKETS no puede contener solo espacios o separadores")
+		}
+		c.AllowedBuckets = uniqueStrings(c.AllowedBuckets)
 	}
 	if c.MaxObjectBytes, err = envPositiveInt64("MAX_OBJECT_BYTES", c.MaxObjectBytes); err != nil {
 		return Config{}, err
@@ -104,6 +113,19 @@ func splitCSV(s string) []string {
 		if p = strings.TrimSpace(p); p != "" {
 			out = append(out, p)
 		}
+	}
+	return out
+}
+
+func uniqueStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
 	}
 	return out
 }
@@ -159,6 +181,10 @@ func (c Config) encEnabled(key string) bool {
 		return false
 	}
 	return true
+}
+
+func (c Config) bucketAllowed(bucket string) bool {
+	return len(c.AllowedBuckets) == 0 || contains(c.AllowedBuckets, bucket)
 }
 
 func contains(ss []string, s string) bool {

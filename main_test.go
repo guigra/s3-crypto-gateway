@@ -290,3 +290,69 @@ func TestValidatePutChecksums(t *testing.T) {
 		}
 	}
 }
+
+func TestDeniedBucketForEveryOperation(t *testing.T) {
+	tests := []struct {
+		method string
+		target string
+	}{
+		{http.MethodPut, "/blocked/key"},
+		{http.MethodGet, "/blocked/key"},
+		{http.MethodHead, "/blocked/key"},
+		{http.MethodDelete, "/blocked/key"},
+		{http.MethodGet, "/blocked?list-type=2"},
+	}
+	gw := &Gateway{cfg: Config{AllowedBuckets: []string{"allowed"}}}
+	for _, tc := range tests {
+		t.Run(tc.method+"_"+tc.target, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			gw.handle(response, httptest.NewRequest(tc.method, tc.target, nil))
+			if response.Code != http.StatusForbidden {
+				t.Fatalf("status=%d, want %d; body=%s", response.Code, http.StatusForbidden, response.Body.String())
+			}
+			if !strings.Contains(response.Body.String(), "AccessDenied") {
+				t.Fatalf("respuesta inesperada: %s", response.Body.String())
+			}
+			if strings.Contains(response.Body.String(), "allowed") {
+				t.Fatalf("la respuesta filtró la allowlist: %s", response.Body.String())
+			}
+		})
+	}
+}
+
+func TestBucketAuthorizationPrecedesFeatureDetection(t *testing.T) {
+	gw := &Gateway{cfg: Config{AllowedBuckets: []string{"allowed"}}}
+	request := httptest.NewRequest(http.MethodPost, "/blocked/key?uploads=", nil)
+	response := httptest.NewRecorder()
+	gw.handle(response, request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("status=%d, want %d; body=%s", response.Code, http.StatusForbidden, response.Body.String())
+	}
+}
+
+func TestAllowedBucketForEverySupportedOperation(t *testing.T) {
+	tests := []struct {
+		method     string
+		target     string
+		wantStatus int
+	}{
+		{http.MethodPut, "/allowed/key", http.StatusOK},
+		{http.MethodGet, "/allowed/key", http.StatusOK},
+		{http.MethodHead, "/allowed/key", http.StatusOK},
+		{http.MethodDelete, "/allowed/key", http.StatusNoContent},
+		{http.MethodGet, "/allowed?list-type=2", http.StatusOK},
+	}
+	for _, tc := range tests {
+		t.Run(tc.method+"_"+tc.target, func(t *testing.T) {
+			gw := &Gateway{
+				cfg: Config{AllowedBuckets: []string{"allowed"}, MaxObjectBytes: 1024},
+				s3:  &fakeS3Backend{body: []byte("data")},
+			}
+			response := httptest.NewRecorder()
+			gw.handle(response, httptest.NewRequest(tc.method, tc.target, nil))
+			if response.Code != tc.wantStatus {
+				t.Fatalf("status=%d, want %d; body=%s", response.Code, tc.wantStatus, response.Body.String())
+			}
+		})
+	}
+}

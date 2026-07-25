@@ -91,6 +91,10 @@ func (gw *Gateway) handle(w http.ResponseWriter, r *http.Request) {
 		s3err(w, http.StatusBadRequest, "InvalidURI", "la ruta debe incluir un bucket")
 		return
 	}
+	if !gw.cfg.bucketAllowed(bucket) {
+		s3err(w, http.StatusForbidden, "AccessDenied", "acceso denegado")
+		return
+	}
 	if feature := unsupportedFeature(r, key); feature != "" {
 		s3err(w, http.StatusNotImplemented, "NotImplemented", "función S3 no soportada: "+feature)
 		return

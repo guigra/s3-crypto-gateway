@@ -1,6 +1,6 @@
 # Spec de implementación: `ALLOWED_BUCKETS` (control en el gateway)
 
-- **Estado:** pendiente de implementar (equipo de seguridad/gateway)
+- **Estado:** implementado en `feature/allowed-buckets`
 - **Origen:** precondición de la decisión AAD=objectKey (CLPE2) — condición 1 del
   equipo de seguridad. Ver `integration-review-2026-07-25.md` §IR-02,
   `deployment-security.md` y `docs/adr/0001-inbound-authentication-and-authorization.md`.
@@ -38,9 +38,9 @@ vuelve al modelo de amenaza.
   operación no soportada de un bucket no permitido se cuele (probar ambos filtros juntos).
 - config: valor válido arranca; valor inválido falla al arrancar.
 
-## Documentación a actualizar (por el equipo)
+## Documentación actualizada
 
-- Tabla de config del `README.md` (nueva var).
-- `docs/s3-api-contract.md` (comportamiento de bucket no permitido).
-- `docs/deployment-security.md`: marcar la precondición como cubrible por este control.
-- `integration-review` §IR-02: cerrar la precondición cuando esté implementado.
+- Tabla de config del `README.md`.
+- `docs/s3-api-contract.md`.
+- `docs/deployment-security.md`.
+- `integration-review` §IR-02.

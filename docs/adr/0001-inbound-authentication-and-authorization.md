@@ -361,7 +361,7 @@ CLPE2/AAD atrapan errores/bypass). El punto 6 de §Objetos ya lo respeta.
 
 **Input 3 — alcance del AAD (IR-02, DECIDIDO 2026-07-25).** Decisión de los mantenedores:
 **AAD = `objectKey` únicamente, NO `bucket`**. Motivos: (a) el despliegue es
-efectivamente single-bucket por config → el replay cross-bucket no está en el modelo
+efectivamente diseñado como single-bucket → el replay cross-bucket no está en el modelo
 de amenaza; (b) atar el bucket añade acoplamiento **frágil** — productor y consumidor
 deben coincidir en la cadena EXACTA del bucket, y el appender sube directo a S3
 mientras el gateway proxea (el nombre de bucket podría divergir → fallos de descifrado
@@ -374,7 +374,7 @@ NO está impuesto hoy por el gateway (acepta cualquier bucket de la ruta). La ga
 debe **imponerse** con al menos uno de estos controles, preferiblemente ambos:
 - **Credenciales de backend limitadas por IAM a un único bucket** (control de despliegue,
   documentar en `deployment-security.md`) — inmediato;
-- **`ALLOWED_BUCKETS` validado por el gateway** (config futura) — control en el propio proceso.
+- **`ALLOWED_BUCKETS` validado por el gateway** — control en el propio proceso.
 
 Si las credenciales permiten varios buckets, el **replay cross-bucket vuelve al modelo de
 amenaza** → esto es a la vez **precondición de la decisión** y **trigger para CLPE3**

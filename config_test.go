@@ -126,3 +126,39 @@ func TestLoadConfigLimitsAndTimeouts(t *testing.T) {
 		t.Fatalf("límites inesperados: %+v", cfg)
 	}
 }
+
+func TestLoadConfigAllowedBuckets(t *testing.T) {
+	t.Setenv("ALLOWED_BUCKETS", " logs-a, logs-b,logs-a ")
+	cfg, err := loadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.AllowedBuckets) != 2 || cfg.AllowedBuckets[0] != "logs-a" || cfg.AllowedBuckets[1] != "logs-b" {
+		t.Fatalf("allowlist inesperada: %#v", cfg.AllowedBuckets)
+	}
+	if !cfg.bucketAllowed("logs-a") || cfg.bucketAllowed("otro") {
+		t.Fatal("la allowlist no se aplica correctamente")
+	}
+}
+
+func TestLoadConfigRejectsMalformedAllowedBuckets(t *testing.T) {
+	for _, value := range []string{" ", ",", " , , "} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("ALLOWED_BUCKETS", value)
+			if _, err := loadConfig(); err == nil {
+				t.Fatalf("ALLOWED_BUCKETS=%q debería impedir el arranque", value)
+			}
+		})
+	}
+}
+
+func TestEmptyAllowedBucketsIsUnrestricted(t *testing.T) {
+	t.Setenv("ALLOWED_BUCKETS", "")
+	cfg, err := loadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.bucketAllowed("cualquier-bucket") {
+		t.Fatal("una allowlist vacía debe mantener compatibilidad")
+	}
+}

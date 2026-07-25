@@ -17,8 +17,10 @@ red no confiable.
    pods autorizados.
 2. Usar credenciales S3 de mínimo privilegio, limitadas a los buckets y
    prefijos estrictamente necesarios.
-   **Precondición de la decisión AAD=objectKey (CLPE2): limitar a UN solo bucket por
-   IAM** — si las creds abarcan varios buckets, reaparece el replay cross-bucket (trigger CLPE3).
+   **Precondición de la decisión AAD=objectKey (CLPE2): limitar a UN solo bucket
+   mediante IAM y/o configurar `ALLOWED_BUCKETS` en el gateway.** Se recomiendan
+   ambos controles. Si ninguno impone single-bucket, reaparece el replay
+   cross-bucket (trigger CLPE3).
 3. Mantener TLS entre el gateway y el backend S3.
 4. Si los clientes no comparten una frontera de red fiable, colocar delante un
    proxy con mTLS o autenticación y autorización equivalentes.

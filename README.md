@@ -72,6 +72,7 @@ aws s3 cp file.txt s3://my-bucket/ir/tenant-a/file.txt \
 | `ENC_ENABLED` | `true`/`false` — envelope encryption on/off (off = transparent proxy) |
 | `ENC_TENANTS` | CSV of tenants to encrypt; empty = all |
 | `ENC_PREFIXES` | CSV of key prefixes to encrypt (e.g. `ir/,archives/`); empty = all |
+| `ALLOWED_BUCKETS` | optional CSV allowlist enforced before every S3 operation; empty = unrestricted in-process (backend IAM must then enforce the single-bucket boundary) |
 | `SCG_KEK_<TENANT>` | base64 32-byte KEK per tenant (uppercased, `-`→`_`; `CLP_KEK_<TENANT>` accepted as a compatibility alias) |
 | `SSEC_ENABLED` / `SSEC_KEY` | optional **SSE-C** layer (headers to the backend; stacks with the envelope) |
 | `MAX_OBJECT_BYTES` | maximum accepted/returned plaintext object size (default 1 GiB; CLPE2 overhead is handled internally) |

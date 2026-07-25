@@ -41,6 +41,10 @@ Las operaciones no deben ignorarse silenciosamente. Un método HTTP desconocido
 recibe `405 MethodNotAllowed`; una función S3 conocida pero no implementada
 recibe XML S3 con `501 NotImplemented`.
 
+Cuando `ALLOWED_BUCKETS` no está vacío, cualquier operación —incluido
+ListObjectsV2— dirigida a otro bucket recibe `403 AccessDenied`. La respuesta no
+revela la allowlist ni confirma si el bucket existe.
+
 ## Límites conocidos
 
 - PUT y GET transforman el objeto completo en memoria y están sujetos a

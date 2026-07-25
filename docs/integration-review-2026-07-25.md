@@ -81,6 +81,10 @@ impuesto por el gateway hoy. Debe imponerse con creds de backend limitadas por I
 creds permiten varios buckets, el replay cross-bucket vuelve al modelo de amenaza →
 trigger para CLPE3 (bucket+key). Ver `deployment-security.md`.
 
+**Control implementado:** `ALLOWED_BUCKETS` permite imponer la allowlist antes
+de todas las operaciones S3. Un valor vacío conserva compatibilidad y requiere
+que IAM imponga la frontera; para defensa en profundidad se recomiendan ambos.
+
 ### IR-03 — Registro histórico desactualizado
 
 `docs/security-review-2026-07-25.md` conserva correctamente el razonamiento
