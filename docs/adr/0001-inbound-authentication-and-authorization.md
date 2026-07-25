@@ -306,7 +306,7 @@ automatizada.
 
 ## Evaluación de los mantenedores e input para la decisión (2026-07-25)
 
-> Estado: **input, no decisión cerrada**. La decisión final es de los mantenedores.
+> Estado: el **alcance del AAD (Input 3) queda DECIDIDO** (objectKey; cierra IR-02). El **rumbo de auth (Inputs 1-2) sigue como INPUT**: el ADR permanece **Propuesto** — la NetworkPolicy cubre el gap por ahora.
 
 **Valoración general — sólido.** Respaldamos los aciertos: SigV4 como elección
 correcta para clientes S3 (interop), deny-by-default sin regla vacía = todo,
@@ -341,7 +341,7 @@ de tenant del gateway y el AAD de CLPE2 (atado a ruta) pasan a ser **defensa en
 profundidad bajo la authz** (la authz es el control primario de aislamiento;
 CLPE2/AAD atrapan errores/bypass). El punto 6 de §Objetos ya lo respeta.
 
-**Input 3 — alcance del AAD (cierra IR-02).** Recomendación de los mantenedores:
+**Input 3 — alcance del AAD (IR-02, DECIDIDO 2026-07-25).** Decisión de los mantenedores:
 **AAD = `objectKey` únicamente, NO `bucket`**. Motivos: (a) el despliegue es
 efectivamente single-bucket por config → el replay cross-bucket no está en el modelo
 de amenaza; (b) atar el bucket añade acoplamiento **frágil** — productor y consumidor

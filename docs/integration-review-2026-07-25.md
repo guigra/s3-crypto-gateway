@@ -52,7 +52,7 @@ compatibilidad con CLPE1. El comportamiento actual del código es, por tanto, el
 comportamiento aprobado. El despliegue no debe presentarse como capaz de leer
 objetos CLPE1.
 
-### IR-02 — El AAD liga key, no bucket
+### IR-02 — El AAD liga key, no bucket — Resuelto (objectKey)
 
 El AAD actual es exactamente el object key. Impide mover un ciphertext a otra
 key, pero el mismo ciphertext puede copiarse a otro bucket conservando la misma
@@ -62,7 +62,10 @@ La comprobación de tenant del gateway sigue activa y el key suele contener el
 tenant, lo que reduce el riesgo. Aun así, la decisión anterior contemplaba
 autenticar contexto de ubicación, incluyendo potencialmente bucket.
 
-Debe decidirse si el dominio de identidad del objeto es:
+DECIDIDO 2026-07-25: **solo `objectKey`** (no bucket). El despliegue es single-bucket
+por config (replay cross-bucket fuera del modelo de amenaza); atar el bucket exige
+coincidencia byte-a-byte productor/consumidor (appender sube directo, gateway proxea)
+con riesgo de fallos espurios. Opciones consideradas:
 
 - solo `objectKey`, que facilita mover buckets completos;
 - `bucket + objectKey`, que impide copias entre buckets;
