@@ -14,7 +14,7 @@ import (
 
 func TestValidateEnvelopeTenant(t *testing.T) {
 	kek := func(string) ([]byte, error) { return bytes.Repeat([]byte{7}, 32), nil }
-	envelope, err := clpe.Encrypt([]byte("secreto"), "tenant-a", kek)
+	envelope, err := clpe.Encrypt([]byte("secreto"), "tenant-a", "ir-go/tenant-a/object", kek)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -24,16 +24,18 @@ it speaks the S3 API on both sides and re-signs requests with real credentials.
 - **Two stackable layers**: an AES-256-GCM envelope (this gateway holds the keys)
   plus optional S3 SSE-C headers (provider encrypts at rest with a key it does not store).
 
-## Envelope format (`CLPE`)
+## Envelope format (`CLPE2`)
 
 Each object is encrypted with a random per-object 256-bit DEK; the DEK is wrapped
 with the tenant's KEK. GCM authenticates everything (tampering fails the read).
 
 ```
-magic(4)="CLPE" | ver(1)=1 | tenantLen(1) | tenant | ivDek(12) | dekCtLen(2 BE) | dekCt | ivData(12) | dataCt
+magic(4)="CLPE" | ver(1)=2 | tenantLen(1) | tenant | ivDek(12) | dekCtLen(2 BE) | dekCt | ivData(12) | dataCt
 ```
 
 The tenant is derived from the 2nd segment of the object key (`prefix/<tenant>/...`).
+**CLPE2** binds the object's S3 key as GCM **AAD**: an envelope copied to a
+different path fails to decrypt. (v2 replaces v1; v1 is no longer emitted or accepted.)
 
 ## Quickstart
 
@@ -81,8 +83,9 @@ import "github.com/guigra/s3-crypto-gateway/pkg/clpe"
 
 kek := func(tenant string) ([]byte, error) { return myKeyStore.Get(tenant) }
 
-env, err := clpe.Encrypt(plaintext, "tenant-a", kek) // seal
-pt, err  := clpe.Decrypt(env, kek)                   // open (fails on tampering / wrong KEK)
+objectKey := "ir/tenant-a/…/x.clp.zst"               // the exact S3 key, bound as AAD
+env, err := clpe.Encrypt(plaintext, "tenant-a", objectKey, kek) // seal
+pt, err  := clpe.Decrypt(env, objectKey, kek)                   // open (fails on tampering / wrong KEK / wrong key)
 ok       := clpe.IsEnvelope(data)                    // detect
 ```
 

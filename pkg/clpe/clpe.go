@@ -25,7 +25,7 @@ import (
 var clpeMagic = []byte("CLPE")
 
 const (
-	clpeVersion = 1
+	clpeVersion = 2 // CLPE2: AAD = clave del objeto atada al GCM del dato (v1 ya no se emite ni se acepta)
 	ivLen       = 12 // nonce GCM
 	dekLen      = 32 // AES-256
 	gcmTagLen   = 16
@@ -51,8 +51,12 @@ func Tenant(env []byte) (string, error) {
 	return parsed.tenant, nil
 }
 
-// Encrypt seals pt into a CLPE envelope under the tenant's KEK.
-func Encrypt(pt []byte, tenant string, kekFor KekFn) ([]byte, error) {
+// Encrypt seals pt into a CLPE2 envelope under the tenant's KEK, binding the
+// object's S3 key as AAD: an envelope copied to a different key will fail to
+// decrypt. objectKey must be the exact S3 key the ciphertext is stored at
+// (UTF-8, no leading slash, no URL-encoding) — the same string the consumer
+// will use to decrypt.
+func Encrypt(pt []byte, tenant, objectKey string, kekFor KekFn) ([]byte, error) {
 	if len(tenant) > 255 {
 		return nil, errors.New("tenant demasiado largo (>255)")
 	}
@@ -71,7 +75,7 @@ func Encrypt(pt []byte, tenant string, kekFor KekFn) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	dataCt, err := gcmSeal(dek, ivData, pt)
+	dataCt, err := gcmSeal(dek, ivData, pt, []byte(objectKey)) // AAD = clave del objeto
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +83,7 @@ func Encrypt(pt []byte, tenant string, kekFor KekFn) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	dekCt, err := gcmSeal(kek, ivDek, dek)
+	dekCt, err := gcmSeal(kek, ivDek, dek, nil) // wrap de la DEK: sin AAD
 	if err != nil {
 		return nil, err
 	}
@@ -97,9 +101,10 @@ func Encrypt(pt []byte, tenant string, kekFor KekFn) ([]byte, error) {
 	return out, nil
 }
 
-// Decrypt opens a CLPE envelope. It fails if the envelope was tampered with
-// or the KEK is wrong.
-func Decrypt(env []byte, kekFor KekFn) ([]byte, error) {
+// Decrypt opens a CLPE2 envelope. It fails if the envelope was tampered with,
+// the KEK is wrong, or objectKey does not match the key bound at seal time
+// (i.e. the envelope was copied to a different S3 path).
+func Decrypt(env []byte, objectKey string, kekFor KekFn) ([]byte, error) {
 	parsed, err := parseEnvelope(env)
 	if err != nil {
 		return nil, err
@@ -111,11 +116,15 @@ func Decrypt(env []byte, kekFor KekFn) ([]byte, error) {
 	if len(kek) != dekLen {
 		return nil, errors.New("KEK debe ser de 32 bytes")
 	}
-	dek, err := gcmOpen(kek, parsed.ivDek, parsed.dekCt)
+	dek, err := gcmOpen(kek, parsed.ivDek, parsed.dekCt, nil)
 	if err != nil {
 		return nil, errors.New("fallo al desenvolver la DEK (¿KEK errónea o sobre manipulado?)")
 	}
-	return gcmOpen(dek, parsed.ivData, parsed.dataCt)
+	pt, err := gcmOpen(dek, parsed.ivData, parsed.dataCt, []byte(objectKey))
+	if err != nil {
+		return nil, errors.New("fallo al descifrar (¿sobre manipulado o clave de objeto no coincide?)")
+	}
+	return pt, nil
 }
 
 type parsedEnvelope struct {
@@ -135,7 +144,7 @@ func parseEnvelope(env []byte) (parsedEnvelope, error) {
 		return parsedEnvelope{}, errors.New("sobre truncado (versión)")
 	}
 	if env[p] != clpeVersion {
-		return parsedEnvelope{}, errors.New("versión CLPE no soportada")
+		return parsedEnvelope{}, errors.New("versión CLPE no soportada (solo v2)")
 	}
 	p++
 	if p >= len(env) {
@@ -163,20 +172,20 @@ func parseEnvelope(env []byte) (parsedEnvelope, error) {
 	return parsedEnvelope{tenant: tenant, ivDek: ivDek, dekCt: dekCt, ivData: ivData, dataCt: dataCt}, nil
 }
 
-// --- helpers AES-GCM ---
-func gcmSeal(key, iv, pt []byte) ([]byte, error) {
+// --- helpers AES-GCM (aad autenticado pero NO cifrado; nil = sin AAD) ---
+func gcmSeal(key, iv, pt, aad []byte) ([]byte, error) {
 	g, err := newGCM(key)
 	if err != nil {
 		return nil, err
 	}
-	return g.Seal(nil, iv, pt, nil), nil
+	return g.Seal(nil, iv, pt, aad), nil
 }
-func gcmOpen(key, iv, ct []byte) ([]byte, error) {
+func gcmOpen(key, iv, ct, aad []byte) ([]byte, error) {
 	g, err := newGCM(key)
 	if err != nil {
 		return nil, err
 	}
-	return g.Open(nil, iv, ct, nil)
+	return g.Open(nil, iv, ct, aad)
 }
 func newGCM(key []byte) (cipher.AEAD, error) {
 	c, err := aes.NewCipher(key)
