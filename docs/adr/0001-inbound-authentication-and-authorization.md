@@ -306,7 +306,7 @@ automatizada.
 
 ## Evaluación de los mantenedores e input para la decisión (2026-07-25)
 
-> Estado: el **alcance del AAD (Input 3) queda DECIDIDO** (objectKey; cierra IR-02). El **rumbo de auth (Inputs 1-2) sigue como INPUT**: el ADR permanece **Propuesto** — la NetworkPolicy cubre el gap por ahora.
+> Estado: el **alcance del AAD (Input 3) queda DECIDIDO** (objectKey; cierra IR-02). El **rumbo de auth (Inputs 1-2) sigue como INPUT**: el ADR permanece **Propuesto**. La NetworkPolicy **mitiga temporalmente la exposición, pero NO sustituye autenticación ni autorización de workload** — que un cambio de red no la convierta en confianza implícita. **Revisado y aprobado por el equipo de seguridad (2026-07-25) con 4 condiciones, incorporadas abajo.**
 
 **Valoración general — sólido.** Respaldamos los aciertos: SigV4 como elección
 correcta para clientes S3 (interop), deny-by-default sin regla vacía = todo,
@@ -322,19 +322,37 @@ S3 **interna** de unos pocos clientes de **primera parte** (gateway-go, phase2, 
 lifecycle) en el mismo dominio de confianza, tras NetworkPolicy + egress FortiProxy.
 Para ese caso proponemos **fasear por exposición**:
 
-- **Fase A (interno, hoy):** **mTLS del mesh** (OpenShift ya trae SPIFFE/cert-manager)
-  como control **primario** + credenciales de backend de mínimo privilegio +
-  NetworkPolicy (ya). Cierra el gap "cualquier llamante hereda las creds del backend"
-  de forma proporcional, **sin** secretos compartidos que custodiar ni canonicalización
-  SigV4. Nota: SigV4 obliga al gateway a **guardar los secret access keys de los
-  clientes** (para el HMAC) → se vuelve un almacén de secretos = objetivo; mTLS (clave
-  pública) lo evita.
+- **Fase A (interno, hoy):** **mTLS del mesh con AUTORIZACIÓN por identidad de workload**
+  como control **primario**. **Condición del equipo de seguridad (aceptada): mTLS solo
+  basta si hay authz por identidad — un cert válido del mesh no es autorización.**
+  Fase A DEBE exigir:
+  - validación de una **SPIFFE ID concreta** (no "pertenece al mesh");
+  - **allowlist** de workloads autorizados, aplicada por policy del mesh/sidecar;
+  - **imposibilidad de alcanzar el proceso saltándose el sidecar** (sin puerto directo);
+  - **NetworkPolicy restrictiva** (mitigación de red, no autenticación);
+  - credenciales S3 **limitadas al bucket y prefijos** necesarios;
+  - **rotación automática** de certs + pruebas de expiración.
+
+  cert-manager *emite* certificados; **por sí solo no aplica autorización**. Ventaja vs
+  SigV4: no convierte al gateway en custodio de los secret keys de clientes (SigV4 los
+  necesita para el HMAC → almacén de secretos = objetivo); mTLS (clave pública) lo evita.
 - **Fase B (exposición / multi-tenant / terceros):** SigV4 + authz por
   bucket/prefix/tenant, exactamente como describe este ADR. **El ADR del equipo ES la
   Fase B**; solo proponemos no construirla entera si el despliegue aún no la necesita.
 
 El ADR ya contempla "SigV4 sin mTLS como etapa de rollout"; para el caso interno
 **invertimos el orden** (mTLS primero).
+
+**Triggers objetivos de Fase B (condición del equipo, aceptada).** SigV4 + authz se
+activa si aparece CUALQUIERA de:
+- clientes de **terceros**;
+- endpoint accesible **fuera del mesh**;
+- **más de un dominio de confianza**;
+- acceso **multi-tenant con políticas diferentes**;
+- necesidad de **autorización por bucket/prefijo/tenant**;
+- **URLs prefirmadas**;
+- rutas que puedan **evitar la identidad mTLS**;
+- **incapacidad de imponer la allowlist de SPIFFE IDs**.
 
 **Input 2 — capas y CLPE2.** Cuando exista authz por principal→tenant, la comprobación
 de tenant del gateway y el AAD de CLPE2 (atado a ruta) pasan a ser **defensa en
@@ -349,9 +367,19 @@ deben coincidir en la cadena EXACTA del bucket, y el appender sube directo a S3
 mientras el gateway proxea (el nombre de bucket podría divergir → fallos de descifrado
 espurios). La 3ª opción ("identificador lógico estable") se descarta por complejidad
 (habría que derivar el mismo ID lógico en ambos lados; más frágil que la key física).
-Se cierra **ahora** que no hay datos CLPE2 persistentes; si el despliegue se vuelve
-multi-bucket con movimiento entre buckets como riesgo real, se añade en CLPE3/flag.
-Detalle del formato: `clp-log-tier/docs/superpowers/specs/2026-07-25-clpe2-aad-binding-design.md`.
+Se cierra **ahora** que no hay datos CLPE2 persistentes.
+
+**Precondición operativa (condición del equipo de seguridad, aceptada).** "Single-bucket"
+NO está impuesto hoy por el gateway (acepta cualquier bucket de la ruta). La garantía
+debe **imponerse** con al menos uno de estos controles, preferiblemente ambos:
+- **Credenciales de backend limitadas por IAM a un único bucket** (control de despliegue,
+  documentar en `deployment-security.md`) — inmediato;
+- **`ALLOWED_BUCKETS` validado por el gateway** (config futura) — control en el propio proceso.
+
+Si las credenciales permiten varios buckets, el **replay cross-bucket vuelve al modelo de
+amenaza** → esto es a la vez **precondición de la decisión** y **trigger para CLPE3**
+(atar bucket+key). Detalle del formato:
+`clp-log-tier/docs/superpowers/specs/2026-07-25-clpe2-aad-binding-design.md`.
 
 ## Referencias internas
 

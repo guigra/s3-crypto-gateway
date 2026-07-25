@@ -62,10 +62,10 @@ La comprobación de tenant del gateway sigue activa y el key suele contener el
 tenant, lo que reduce el riesgo. Aun así, la decisión anterior contemplaba
 autenticar contexto de ubicación, incluyendo potencialmente bucket.
 
-DECIDIDO 2026-07-25: **solo `objectKey`** (no bucket). El despliegue es single-bucket
-por config (replay cross-bucket fuera del modelo de amenaza); atar el bucket exige
-coincidencia byte-a-byte productor/consumidor (appender sube directo, gateway proxea)
-con riesgo de fallos espurios. Opciones consideradas:
+DECIDIDO 2026-07-25: **solo `objectKey`** (no bucket). El replay cross-bucket queda fuera
+del modelo de amenaza **siempre que single-bucket esté IMPUESTO** (ver precondición);
+atar el bucket exige coincidencia byte-a-byte productor/consumidor (appender sube directo,
+gateway proxea) con riesgo de fallos espurios. Opciones consideradas:
 
 - solo `objectKey`, que facilita mover buckets completos;
 - `bucket + objectKey`, que impide copias entre buckets;
@@ -74,6 +74,12 @@ con riesgo de fallos espurios. Opciones consideradas:
 Cambiar el AAD después de emitir objetos CLPE2 requiere versionado o una regla
 de compatibilidad; por eso debe cerrarse antes de una release con datos
 persistentes.
+
+**Precondición (condición del equipo de seguridad, aceptada):** single-bucket NO está
+impuesto por el gateway hoy. Debe imponerse con creds de backend limitadas por IAM a un
+único bucket (inmediato) y/o `ALLOWED_BUCKETS` validado por el gateway (futuro). Si las
+creds permiten varios buckets, el replay cross-bucket vuelve al modelo de amenaza →
+trigger para CLPE3 (bucket+key). Ver `deployment-security.md`.
 
 ### IR-03 — Registro histórico desactualizado
 
