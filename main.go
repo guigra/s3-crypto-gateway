@@ -8,6 +8,9 @@ import (
 	"context"
 	"crypto/md5"
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/xml"
 	"errors"
@@ -15,13 +18,14 @@ import (
 	"io"
 	"log"
 	"net/http"
-
-	"github.com/guigra/s3-crypto-gateway/pkg/clpe"
 	"os"
 	"strconv"
 	"strings"
 
+	"github.com/guigra/s3-crypto-gateway/pkg/clpe"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
@@ -34,7 +38,15 @@ func env(k, d string) string {
 
 type Gateway struct {
 	cfg Config
-	s3  *S3
+	s3  s3Backend
+}
+
+type s3Backend interface {
+	Get(context.Context, string, string, *SSEC, int64) ([]byte, map[string]string, string, error)
+	Put(context.Context, string, string, []byte, map[string]string, string, *SSEC) error
+	Head(context.Context, string, string, *SSEC) (*s3.HeadObjectOutput, error)
+	Delete(context.Context, string, string) error
+	List(context.Context, string, string, string, string, int32) (*s3.ListObjectsV2Output, error)
 }
 
 func main() {
@@ -91,7 +103,7 @@ func (gw *Gateway) handle(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("list-type") == "2" {
 			gw.list(ctx, w, r, bucket)
 		} else {
-			gw.get(ctx, w, bucket, key)
+			gw.get(ctx, w, r, bucket, key)
 		}
 	case http.MethodHead:
 		gw.head(ctx, w, bucket, key)
@@ -114,15 +126,11 @@ func unsupportedFeature(r *http.Request, key string) string {
 	}
 
 	for _, header := range []string{
-		"Range",
-		"If-Match",
-		"If-None-Match",
 		"If-Modified-Since",
 		"If-Unmodified-Since",
+		"If-Range",
 		"X-Amz-Copy-Source",
-		"X-Amz-Sdk-Checksum-Algorithm",
 		"X-Amz-Checksum-Mode",
-		"Content-Md5",
 		"Content-Encoding",
 		"Content-Disposition",
 		"Cache-Control",
@@ -132,9 +140,23 @@ func unsupportedFeature(r *http.Request, key string) string {
 			return "cabecera " + header
 		}
 	}
+	if r.Header.Get("Range") != "" && (r.Method != http.MethodGet || key == "") {
+		return "cabecera Range fuera de GetObject"
+	}
+	if r.Header.Get("Content-MD5") != "" && (r.Method != http.MethodPut || key == "") {
+		return "cabecera Content-MD5 fuera de PutObject"
+	}
+	if algorithm := rfcChecksumAlgorithm(r.Header.Get("X-Amz-Sdk-Checksum-Algorithm")); algorithm != "" {
+		if r.Method != http.MethodPut || key == "" || algorithm != "SHA256" {
+			return "algoritmo de checksum " + algorithm
+		}
+	}
 	for header := range r.Header {
 		lowerHeader := strings.ToLower(header)
 		if strings.HasPrefix(lowerHeader, "x-amz-checksum-") {
+			if lowerHeader == "x-amz-checksum-sha256" && r.Method == http.MethodPut && key != "" {
+				continue
+			}
 			return "checksums S3"
 		}
 		for _, unsupportedPrefix := range []string{
@@ -181,6 +203,10 @@ func (gw *Gateway) put(ctx context.Context, w http.ResponseWriter, r *http.Reque
 		internalErr(w, 400, "InvalidRequest", "no se pudo leer el cuerpo de la petición", err)
 		return
 	}
+	if err := validatePutChecksums(r.Header, body); err != nil {
+		s3err(w, http.StatusBadRequest, "BadDigest", err.Error())
+		return
+	}
 	etag := md5hex(body) // ETag = md5 del PLANTEXT recibido -> la validación del cliente cuadra
 	meta := userMeta(r.Header)
 	ct := r.Header.Get("Content-Type")
@@ -201,7 +227,7 @@ func (gw *Gateway) put(ctx context.Context, w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(200)
 }
 
-func (gw *Gateway) get(ctx context.Context, w http.ResponseWriter, bucket, key string) {
+func (gw *Gateway) get(ctx context.Context, w http.ResponseWriter, r *http.Request, bucket, key string) {
 	maxBackendBytes := gw.cfg.MaxObjectBytes + clpe.MaxEnvelopeOverhead
 	body, meta, ct, err := gw.s3.Get(ctx, bucket, key, gw.cfg.ssec(), maxBackendBytes)
 	if err != nil {
@@ -225,16 +251,126 @@ func (gw *Gateway) get(ctx context.Context, w http.ResponseWriter, bucket, key s
 		s3err(w, http.StatusRequestEntityTooLarge, "EntityTooLarge", "el objeto supera el tamaño máximo permitido")
 		return
 	}
+	etag := md5hex(body)
+	if ifMatch := r.Header.Get("If-Match"); ifMatch != "" && !etagMatches(ifMatch, etag, false) {
+		s3err(w, http.StatusPreconditionFailed, "PreconditionFailed", "la condición If-Match no se cumple")
+		return
+	}
+	if ifNoneMatch := r.Header.Get("If-None-Match"); ifNoneMatch != "" && etagMatches(ifNoneMatch, etag, true) {
+		w.Header().Set("ETag", `"`+etag+`"`)
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	status := http.StatusOK
+	if rangeHeader := r.Header.Get("Range"); rangeHeader != "" {
+		fullSize := int64(len(body))
+		start, end, rangeErr := parseByteRange(rangeHeader, fullSize)
+		if rangeErr != nil {
+			w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", len(body)))
+			s3err(w, http.StatusRequestedRangeNotSatisfiable, "InvalidRange", "el rango solicitado no es válido")
+			return
+		}
+		body = body[start : end+1]
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, fullSize))
+		w.Header().Set("Accept-Ranges", "bytes")
+		status = http.StatusPartialContent
+	}
 	if ct != "" {
 		w.Header().Set("Content-Type", ct)
 	}
 	for k, v := range meta {
 		w.Header().Set("X-Amz-Meta-"+k, v)
 	}
-	w.Header().Set("ETag", `"`+md5hex(body)+`"`) // ETag del PLANTEXT devuelto (no del ciphertext)
+	w.Header().Set("ETag", `"`+etag+`"`) // ETag del PLANTEXT devuelto (no del ciphertext)
 	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
-	w.WriteHeader(200)
+	w.WriteHeader(status)
 	_, _ = w.Write(body)
+}
+
+func validatePutChecksums(header http.Header, body []byte) error {
+	if value := header.Get("Content-MD5"); value != "" {
+		expected, err := base64.StdEncoding.DecodeString(value)
+		sum := md5.Sum(body)
+		if err != nil || len(expected) != len(sum) || subtle.ConstantTimeCompare(expected, sum[:]) != 1 {
+			return errors.New("Content-MD5 no coincide con el cuerpo recibido")
+		}
+	}
+	if value := header.Get("X-Amz-Checksum-Sha256"); value != "" {
+		expected, err := base64.StdEncoding.DecodeString(value)
+		sum := sha256.Sum256(body)
+		if err != nil || len(expected) != len(sum) || subtle.ConstantTimeCompare(expected, sum[:]) != 1 {
+			return errors.New("X-Amz-Checksum-Sha256 no coincide con el cuerpo recibido")
+		}
+	}
+	if algorithm := rfcChecksumAlgorithm(header.Get("X-Amz-Sdk-Checksum-Algorithm")); algorithm != "" {
+		if algorithm != "SHA256" || header.Get("X-Amz-Checksum-Sha256") == "" {
+			return errors.New("el checksum solicitado requiere una cabecera SHA-256 explícita")
+		}
+	}
+	return nil
+}
+
+func rfcChecksumAlgorithm(value string) string {
+	return strings.ToUpper(strings.TrimSpace(value))
+}
+
+func etagMatches(condition, etag string, weakComparison bool) bool {
+	for _, candidate := range strings.Split(condition, ",") {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "*" {
+			return true
+		}
+		weak := strings.HasPrefix(candidate, "W/")
+		if weak {
+			candidate = strings.TrimSpace(strings.TrimPrefix(candidate, "W/"))
+		}
+		if weak && !weakComparison {
+			continue
+		}
+		if candidate == `"`+etag+`"` {
+			return true
+		}
+	}
+	return false
+}
+
+func parseByteRange(value string, size int64) (int64, int64, error) {
+	if size <= 0 || !strings.HasPrefix(value, "bytes=") {
+		return 0, 0, errors.New("formato Range inválido")
+	}
+	spec := strings.TrimPrefix(value, "bytes=")
+	if strings.Contains(spec, ",") {
+		return 0, 0, errors.New("múltiples rangos no soportados")
+	}
+	startText, endText, ok := strings.Cut(spec, "-")
+	if !ok || (startText == "" && endText == "") {
+		return 0, 0, errors.New("rango vacío")
+	}
+	if startText == "" {
+		suffix, err := strconv.ParseInt(endText, 10, 64)
+		if err != nil || suffix <= 0 {
+			return 0, 0, errors.New("sufijo Range inválido")
+		}
+		if suffix > size {
+			suffix = size
+		}
+		return size - suffix, size - 1, nil
+	}
+	start, err := strconv.ParseInt(startText, 10, 64)
+	if err != nil || start < 0 || start >= size {
+		return 0, 0, errors.New("inicio Range inválido")
+	}
+	if endText == "" {
+		return start, size - 1, nil
+	}
+	end, err := strconv.ParseInt(endText, 10, 64)
+	if err != nil || end < start {
+		return 0, 0, errors.New("fin Range inválido")
+	}
+	if end >= size {
+		end = size - 1
+	}
+	return start, end, nil
 }
 
 func (gw *Gateway) head(ctx context.Context, w http.ResponseWriter, bucket, key string) {

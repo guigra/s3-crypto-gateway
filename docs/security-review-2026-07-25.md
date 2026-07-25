@@ -288,3 +288,5 @@ compatible ni una prueba de penetración del despliegue real.
 | 2026-07-25 | Implementación de Fase 1 completada en la rama; build, vet, tests, race, fuzzing y `govulncheck` superados. Pendiente de revisión y CI remoto. |
 | 2026-07-25 | Se inicia la Fase 2 en `feature/phase2-s3-contract`, aislada del trabajo CLPE2: contrato S3, rechazo explícito, frontera de confianza y NetworkPolicy. |
 | 2026-07-25 | Implementación de Fase 2 completada en la rama; build, vet, tests y race superados. Pendiente de revisión y CI remoto. |
+| 2026-07-25 | Se inicia compatibilidad S3 incremental en `feature/s3-range-and-integrations`: Range sobre plaintext, condiciones ETag, checksums PUT y pruebas con backend desacoplado; sin cambios en `pkg/clpe`. |
+| 2026-07-25 | Bloque de compatibilidad S3 completado en la rama; build runtime, vet, tests, race y `govulncheck` superados. Pendiente de revisión e integración tras Fase 2. |

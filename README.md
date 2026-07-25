@@ -25,8 +25,9 @@ objects selected by the encryption policy.
   The storage provider cannot read your data — validated: raw GET returns
   ciphertext (or HTTP 400 with the optional SSE-C layer enabled).
 - **S3-compatible subset**: simple PUT/GET/HEAD/DELETE and ListObjectsV2 are
-  supported. Range, multipart, conditional requests, CopyObject, versioning and
-  checksums are rejected explicitly. See
+  supported. Single-range GET, ETag conditions and explicit MD5/SHA-256 PUT
+  checksums are also supported. Multipart, CopyObject, versioning and remaining
+  features are rejected explicitly. See
   [`docs/s3-api-contract.md`](docs/s3-api-contract.md).
 - **Selective**: encrypt everything, or scope by key prefix and/or tenant.
 - **Two stackable layers**: an AES-256-GCM envelope (this gateway holds the keys)
