@@ -217,7 +217,7 @@ func (gw *Gateway) put(ctx context.Context, w http.ResponseWriter, r *http.Reque
 			return
 		}
 		body = enc
-		meta["clp-enc"] = "CLPE1" // marca; el GET detecta por el magic igualmente
+		meta["clp-enc"] = "CLPE2" // marca; el GET detecta por el magic igualmente
 	}
 	if err := gw.s3.Put(ctx, bucket, key, body, meta, ct, gw.cfg.ssec()); err != nil {
 		internalErr(w, 502, "UpstreamError", "el backend S3 no pudo completar la operación", err)

@@ -10,7 +10,7 @@ limitarse a las operaciones descritas aquí.
 |---|---|---|
 | PutObject simple | `PUT /{bucket}/{key}` | Lee un objeto completo, valida `Content-MD5` y/o SHA-256 si se proporcionan, lo cifra si aplica la política y lo escribe en el backend. |
 | GetObject | `GET /{bucket}/{key}` | Lee y, si corresponde, descifra el objeto. Soporta un único `Range` sobre el plaintext y condiciones ETag `If-Match`/`If-None-Match`. |
-| HeadObject | `HEAD /{bucket}/{key}` | Pasa la petición al backend. Para objetos CLPE1, tamaño y ETag corresponden actualmente al ciphertext. |
+| HeadObject | `HEAD /{bucket}/{key}` | Pasa la petición al backend. Para objetos CLPE2, tamaño y ETag del HEAD corresponden al ciphertext (el GET devuelve el plano). |
 | DeleteObject | `DELETE /{bucket}/{key}` | Elimina el objeto en el backend. |
 | ListObjectsV2 | `GET /{bucket}?list-type=2` | Soporta `prefix`, `continuation-token`, `delimiter` y `max-keys`. |
 | Health check | `GET /healthz` | Endpoint propio del servicio; no forma parte de S3. |

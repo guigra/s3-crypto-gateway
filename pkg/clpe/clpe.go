@@ -25,12 +25,12 @@ import (
 var clpeMagic = []byte("CLPE")
 
 const (
-	clpeVersion = 2 // CLPE2: AAD = clave del objeto atada al GCM del dato (v1 ya no se emite ni se acepta)
+	clpeVersion = 2  // CLPE2: AAD = clave del objeto atada al GCM del dato (v1 ya no se emite ni se acepta)
 	ivLen       = 12 // nonce GCM
 	dekLen      = 32 // AES-256
 	gcmTagLen   = 16
 
-	// MaxEnvelopeOverhead is the largest number of bytes CLPE1 adds to a
+	// MaxEnvelopeOverhead is the largest number of bytes CLPE2 adds to a
 	// plaintext (using the maximum 255-byte tenant).
 	MaxEnvelopeOverhead = 4 + 1 + 1 + 255 + ivLen + 2 + (dekLen + gcmTagLen) + ivLen + gcmTagLen
 )

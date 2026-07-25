@@ -74,7 +74,7 @@ aws s3 cp file.txt s3://my-bucket/ir/tenant-a/file.txt \
 | `ENC_PREFIXES` | CSV of key prefixes to encrypt (e.g. `ir/,archives/`); empty = all |
 | `SCG_KEK_<TENANT>` | base64 32-byte KEK per tenant (uppercased, `-`→`_`; `CLP_KEK_<TENANT>` accepted as a compatibility alias) |
 | `SSEC_ENABLED` / `SSEC_KEY` | optional **SSE-C** layer (headers to the backend; stacks with the envelope) |
-| `MAX_OBJECT_BYTES` | maximum accepted/returned plaintext object size (default 1 GiB; CLPE1 overhead is handled internally) |
+| `MAX_OBJECT_BYTES` | maximum accepted/returned plaintext object size (default 1 GiB; CLPE2 overhead is handled internally) |
 | `READ_HEADER_TIMEOUT` / `READ_TIMEOUT` | inbound HTTP timeouts (default `10s` / `5m`) |
 | `WRITE_TIMEOUT` / `IDLE_TIMEOUT` | outbound/idle HTTP timeouts (default `5m` / `1m`) |
 
