@@ -2,8 +2,8 @@
 
 - **Fecha:** 2026-07-25
 - **Commit revisado:** `443bf12`
-- **Resultado técnico:** build y suite correctos; decisiones de migración y AAD
-  pendientes de confirmación explícita
+- **Resultado técnico:** build y suite correctos; política CLPE1 resuelta y
+  alcance del AAD pendiente de confirmación explícita
 
 ## Alcance integrado
 
@@ -38,23 +38,19 @@ pruebas end-to-end contra el backend S3 productivo.
 
 ## Observaciones que requieren decisión
 
-### IR-01 — CLPE1 deja de ser legible
+### IR-01 — CLPE1 deja de ser legible — Resuelto
 
 CLPE2 se implementó como reemplazo: el parser solo acepta versión 2. Un objeto
 CLPE1 existente produce “versión no soportada”.
 
-Esto contradice la decisión anterior que pedía lectura retrocompatible y
-migración coordinada. Puede ser correcto si no existen objetos CLPE1 que deban
-conservarse o si se ejecutará una migración completa antes del despliegue.
+Producto confirma que CLPE1 no se mantendrá: no habrá lectura retrocompatible
+ni migración desde v1. CLPE2 reemplaza a CLPE1 y es la única versión emitida y
+aceptada.
 
-Antes de release debe elegirse y probarse una opción:
-
-1. confirmar que no existen datos CLPE1 persistentes;
-2. migrarlos con una herramienta y procedimiento verificables; o
-3. añadir lectura CLPE1 temporal, manteniendo emisión exclusiva de CLPE2.
-
-No debe desplegarse suponiendo retrocompatibilidad: el código actual no la
-ofrece.
+Esta decisión supersede la condición histórica que pedía conservar
+compatibilidad con CLPE1. El comportamiento actual del código es, por tanto, el
+comportamiento aprobado. El despliegue no debe presentarse como capaz de leer
+objetos CLPE1.
 
 ### IR-02 — El AAD liga key, no bucket
 
@@ -83,11 +79,11 @@ histórico, pero su cabecera y varios estados todavía describen Fases 1/2 y
 CLPE2 como pendientes. También conserva como condición “no modificar CLPE1 de
 forma incompatible”, decisión que el código integrado ha reemplazado.
 
-Se recomienda actualizar el estado cuando producto confirme IR-01 e IR-02, sin
-borrar las decisiones históricas.
+Se recomienda actualizar el estado cuando producto confirme IR-02, sin borrar
+las decisiones históricas. IR-01 ya está resuelto.
 
 ## Resultado
 
 No se detectó una regresión de ejecución en la integración. El resultado es
-apto para continuar revisión, pero una release con datos reales debe quedar
-bloqueada hasta resolver explícitamente IR-01 e IR-02.
+apto para continuar revisión. IR-01 está resuelto por decisión de producto; la
+release debe resolver explícitamente IR-02.

@@ -40,6 +40,11 @@ La remediación se dividirá para no romper:
 - la semántica deliberada `ETag = MD5(plaintext)`;
 - la reproducibilidad, firma Cosign, SBOM y procedencia SLSA de las releases.
 
+> **Decisión posterior:** producto decidió que CLPE2 reemplaza a CLPE1. No se
+> mantendrá lectura retrocompatible ni migración desde v1. Esta decisión
+> supersede las condiciones históricas sobre conservar CLPE1 que aparecen más
+> abajo; se mantienen en el documento únicamente como trazabilidad.
+
 ## Hallazgos y decisiones
 
 ### SEC-01 — Ausencia de autenticación y autorización de clientes
@@ -290,3 +295,4 @@ compatible ni una prueba de penetración del despliegue real.
 | 2026-07-25 | Implementación de Fase 2 completada en la rama; build, vet, tests y race superados. Pendiente de revisión y CI remoto. |
 | 2026-07-25 | Se inicia compatibilidad S3 incremental en `feature/s3-range-and-integrations`: Range sobre plaintext, condiciones ETag, checksums PUT y pruebas con backend desacoplado; sin cambios en `pkg/clpe`. |
 | 2026-07-25 | Bloque de compatibilidad S3 completado en la rama; build runtime, vet, tests, race y `govulncheck` superados. Pendiente de revisión e integración tras Fase 2. |
+| 2026-07-25 | Producto confirma que CLPE2 reemplaza a CLPE1: no se mantendrá lectura ni migración compatible desde v1. |
