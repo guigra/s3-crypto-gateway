@@ -211,7 +211,7 @@ func (gw *Gateway) put(ctx context.Context, w http.ResponseWriter, r *http.Reque
 	meta := userMeta(r.Header)
 	ct := r.Header.Get("Content-Type")
 	if gw.cfg.encEnabled(key) {
-		enc, err := clpe.Encrypt(body, tenantOf(key), KekFor)
+		enc, err := clpe.Encrypt(body, tenantOf(key), key, KekFor)
 		if err != nil {
 			internalErr(w, 500, "EncryptError", "no se pudo cifrar el objeto", err)
 			return
@@ -239,7 +239,7 @@ func (gw *Gateway) get(ctx context.Context, w http.ResponseWriter, r *http.Reque
 			internalErr(w, 500, "DecryptError", "no se pudo descifrar el objeto", tenantErr)
 			return
 		}
-		pt, derr := clpe.Decrypt(body, KekFor)
+		pt, derr := clpe.Decrypt(body, key, KekFor)
 		if derr != nil {
 			internalErr(w, 500, "DecryptError", "no se pudo descifrar el objeto", derr)
 			return

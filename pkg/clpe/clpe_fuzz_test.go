@@ -3,7 +3,7 @@ package clpe
 import "testing"
 
 func FuzzDecryptNeverPanics(f *testing.F) {
-	valid, err := Encrypt([]byte("secreto"), "tenant-a", fixedKek)
+	valid, err := Encrypt([]byte("secreto"), "tenant-a", kObj, fixedKek)
 	if err != nil {
 		f.Fatal(err)
 	}
@@ -12,6 +12,6 @@ func FuzzDecryptNeverPanics(f *testing.F) {
 	f.Add(valid)
 
 	f.Fuzz(func(t *testing.T, input []byte) {
-		_, _ = Decrypt(input, fixedKek)
+		_, _ = Decrypt(input, kObj, fixedKek)
 	})
 }
