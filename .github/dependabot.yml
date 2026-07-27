@@ -2,14 +2,23 @@
 version: 2
 updates:
   - package-ecosystem: gomod
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     directory: /
     schedule:
       interval: weekly
   - package-ecosystem: github-actions
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     directory: /
     schedule:
       interval: weekly
   - package-ecosystem: docker # bumps de los FROM pineados por digest del Containerfile
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     directory: /
     schedule:
       interval: weekly
