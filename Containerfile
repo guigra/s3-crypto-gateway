@@ -11,7 +11,7 @@ COPY pkg/ pkg/
 ENV CGO_ENABLED=0 GOOS=linux GOARCH=amd64
 RUN go build -trimpath -mod=readonly -ldflags="-s -w" -o /s3-crypto-gateway .
 
-FROM registry.access.redhat.com/ubi9/ubi-micro:latest@sha256:b1e86b97028b8fcfb6d85f997c39e6b6b67496163ef8d80d243220a4918e8bef
+FROM registry.access.redhat.com/ubi9/ubi-micro:latest@sha256:7e7f79ab747bf2b452e3043dd89f388e92be4c7fdcc8b815b58adf6c99c39c95
 COPY --from=build /s3-crypto-gateway /s3-crypto-gateway
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 EXPOSE 9000
