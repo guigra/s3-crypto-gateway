@@ -1,7 +1,7 @@
 # crypto-gateway (Go) — frontera S3 de cifrado. Binario estático (sin cgo),
 # runtime UBI-micro (certificación Red Hat) + CA certs para el TLS a S3. Igual patrón que gateway-go.
 # Bases PINEADAS por digest (reproducibilidad + supply chain; Dependabot las actualiza)
-FROM golang:1.26-bookworm@sha256:1ecb7edf62a0408027bd5729dfd6b1b8766e578e8df93995b225dfd0944eb651 AS build
+FROM golang:1.27-bookworm@sha256:648f440f42a0958804efb24df176f806f9d353b41f1c0627f666428e40310f6b AS build
 WORKDIR /src
 # Build REPRODUCIBLE: go.sum fijado + -mod=readonly (falla si el sum no cuadra, no re-tidy).
 COPY go.mod go.sum ./
